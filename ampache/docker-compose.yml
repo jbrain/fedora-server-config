@@ -1,0 +1,64 @@
+services:
+  mariadb:
+    image: mariadb:lts
+    container_name: ampache-mariadb
+    restart: unless-stopped
+    volumes:
+      - /opt/ampache/mariadb:/var/lib/mysql:Z
+    environment:
+      - MARIADB_ROOT_PASSWORD=${MYSQL_ROOT_PASS}
+      - MARIADB_DATABASE=ampache
+      - MARIADB_USER=ampache
+      - MARIADB_PASSWORD=${MYSQL_PASS}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  ampache:
+    # nosql = no bundled MySQL; requires external DB via DB_HOST
+    # Pin to major version to avoid unexpected breaking upgrades; update intentionally
+    image: ampache/ampache:nosql7
+    container_name: ampache
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8081:80"
+    volumes:
+      - /media/Music:/media:ro,z
+      - /opt/ampache/config:/var/www/config:z
+      - /opt/ampache/log:/var/log/ampache:z
+    environment:
+      # DB_USER/DB_PASSWORD = credentials used during install to CREATE schema
+      - DB_HOST=mariadb
+      - DB_NAME=ampache
+      - DB_USER=ampache
+      - DB_PASSWORD=${MYSQL_PASS}
+      # AMPACHE_DB_USER/PASSWORD = credentials written to ampache.cfg.php for runtime
+      - AMPACHE_DB_USER=ampache
+      - AMPACHE_DB_PASSWORD=${MYSQL_PASS}
+      - AMPACHE_ADMIN_USER=admin
+      - AMPACHE_ADMIN_EMAIL=admin@jackson-brain.com
+      - AMPACHE_ADMIN_PASSWORD=${AMPACHE_ADMIN_PASSWORD}
+      - DISABLE_INOTIFYWAIT_CLEAN=1
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M

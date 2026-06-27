@@ -1,0 +1,9 @@
+# Never commit real credentials
+.env
+*.env
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
