@@ -1,0 +1,33 @@
+[DEFAULT]
+maxretry = 3
+logpath = /var/log/secure
+
+[sshd]
+enabled = true
+
+[wordpress]
+enabled  = true
+filter   = wordpress
+# wp-fail2ban logs via PHP syslog() at LOG_AUTH facility, which this host's rsyslog routes
+# to /var/log/messages (NOT /var/log/secure, the [DEFAULT] logpath) -- confirmed via a real
+# pre-migration log line found 2026-08-03. Also NOT an Nginx/Apache access-log-based filter
+# at all; it never depended on which web server fronts the site.
+logpath  = /var/log/messages
+# action_mwl = ban (using the effective $(banaction)s, i.e. firewallcmd-rich-rules per
+# jail.d/00-firewalld.conf) + email notification with whois + matched log lines. Replaces
+# the old hardcoded iptables-multiport action, which was wrong for this firewalld/nftables host.
+action   = %(action_mwl)s
+
+[nginx-http-auth]
+enabled = true
+
+[nginx-botsearch]
+enabled = true
+
+[nginx-limit-req]
+enabled = true
+
+[webmin-auth]
+enabled = false
+filter  = webmin-auth
+action  = iptables-multiport[name=webmin,port="10000"]

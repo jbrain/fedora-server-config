@@ -1,15 +1,15 @@
 [Unit]
 Description=Ampache Music Server Container
 Documentation=https://ampache.org/docker/
-After=network-online.target docker.service shorewall.service
-Requires=docker.service
+After=network-online.target podman.socket shorewall.service
+Requires=podman.socket
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/ampache
-ExecStart=/usr/bin/docker compose up --remove-orphans
-ExecStop=/usr/bin/docker compose down
+ExecStart=/usr/bin/podman compose up --remove-orphans
+ExecStop=/usr/bin/podman compose down
 # Allow time for image pull on first start and MariaDB startup
 TimeoutStartSec=600
 TimeoutStopSec=60

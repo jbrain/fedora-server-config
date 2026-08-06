@@ -1,0 +1,8 @@
+[Unit]
+Description=Shared MariaDB logical backup (wordpress, airsonic, ampache)
+After=shared-mariadb.service
+Requires=shared-mariadb.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/shared-mariadb/backup/mariadb-backup.sh

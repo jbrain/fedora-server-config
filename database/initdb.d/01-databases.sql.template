@@ -1,0 +1,21 @@
+-- Rendered from this .template by setup.sh (placeholders substituted from .env).
+-- Runs ONLY on a truly empty /var/lib/mysql data dir (MariaDB entrypoint convention) —
+-- for migrating an already-populated system, this just creates the empty schemas +
+-- users; existing data is imported afterward via `podman exec -i shared-mariadb mariadb ...`.
+
+CREATE DATABASE IF NOT EXISTS wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS airsonic  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS ampache   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- '%' (not 'localhost') because each app reaches this container over the Podman
+-- `db-backend` bridge network by container/service name, not a Unix socket.
+CREATE USER IF NOT EXISTS 'wordpress'@'%' IDENTIFIED BY '__WORDPRESS_DB_PASSWORD__';
+GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress'@'%';
+
+CREATE USER IF NOT EXISTS 'airsonic'@'%' IDENTIFIED BY '__AIRSONIC_DB_PASSWORD__';
+GRANT ALL PRIVILEGES ON airsonic.* TO 'airsonic'@'%';
+
+CREATE USER IF NOT EXISTS 'ampache'@'%' IDENTIFIED BY '__AMPACHE_DB_PASSWORD__';
+GRANT ALL PRIVILEGES ON ampache.* TO 'ampache'@'%';
+
+FLUSH PRIVILEGES;

@@ -1,0 +1,5 @@
+# Runs `podman auto-update` after ANY dnf/dnf5 transaction completes, tying container image
+# freshness checks to system package updates (per owner request, 2026-08-03). Harmless if it
+# fires more than once per transaction (e.g. many packages updated at once) — podman auto-update
+# is a fast no-op when nothing has actually changed. Output logged for visibility/debugging.
+*:in:/usr/bin/podman auto-update >> /var/log/podman-auto-update-dnf.log 2>&1

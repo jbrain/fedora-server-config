@@ -1,0 +1,28 @@
+[Unit]
+Description=WordPress Container (Apache+PHP, official image)
+Documentation=https://hub.docker.com/_/wordpress
+# NOTE: deliberately NOT `Requires=shared-mariadb.service` — a hard requirement on another
+# `podman compose up`-based unit can cause systemd to re-issue a start job against it even
+# when already active, and re-invoking `podman compose up` on an already-running container
+# causes a crun conflict that kills it (confirmed live 2026-08-03: starting this unit took
+# down shared-mariadb, including Ampache's DB, for ~10s). `After=` alone gives correct boot
+# ordering without that risk; the container itself retries its DB connection at the app layer.
+After=network-online.target podman.socket shared-mariadb.service
+Requires=podman.socket
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/wordpress
+# --in-pod false: podman-compose's default infra-less pod breaks `podman auto-update`
+# (it errors "pod has no infra container" since it can't find a systemd unit for the pod).
+# Plain container avoids the pod entirely so auto-update can find this unit directly.
+ExecStart=/usr/bin/podman compose --in-pod false up --remove-orphans
+ExecStop=/usr/bin/podman compose --in-pod false down
+TimeoutStartSec=600
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

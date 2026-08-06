@@ -1,0 +1,15 @@
+# Overrides fail2ban's stock /etc/fail2ban/filter.d/wordpress.conf, which only matches plain
+# "Authentication failure for X from <HOST>" lines. wp-fail2ban also logs several XML-RPC-
+# specific message formats that the stock regex never covered, so the [wordpress] jail was
+# accumulating "Total failed" hits but never reaching maxretry/banning anything (discovered
+# 2026-08-04: repeat offender IPs hammering xmlrpc.php for minutes, 0 bans ever issued).
+# NOTE: this fully REPLACES the stock failregex (fail2ban .local files override the whole
+# key, not append) -- must keep the original 3 patterns plus the new XML-RPC ones below.
+[Definition]
+failregex = ^%(__prefix_line)sAuthentication failure for .* from <HOST>$
+            ^%(__prefix_line)sBlocked authentication attempt for .* from <HOST>$
+            ^%(__prefix_line)sBlocked user enumeration attempt from <HOST>$
+            ^%(__prefix_line)sAuthentication attempt for unknown user .* from <HOST>$
+            ^%(__prefix_line)sXML-RPC authentication failure for .* from <HOST>$
+            ^%(__prefix_line)sXML-RPC authentication attempt for unknown user .* from <HOST>$
+            ^%(__prefix_line)sXML-RPC multicall authentication failure for .* from <HOST>$

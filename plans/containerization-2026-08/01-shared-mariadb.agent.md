@@ -1,0 +1,205 @@
+# Task 01 — Shared MariaDB Container (foundational)
+
+> **Agent role:** You are a separate agent executing **Phase 1** of the plan in
+> [README.md](README.md). Read that master plan first. This is the **foundational** task —
+> WordPress (Task 02) and Airsonic (Task 03) depend on the database endpoint you create here,
+> and you will also migrate the already-containerized Ampache off its private DB container.
+> **Stop at Gate A and report** — do not start any other task.
+
+## Objective
+
+Stand up a single **shared, secure, resilient MariaDB container** under Podman that hosts three
+databases — `wordpress`, `airsonic`, `ampache` — each with its own least-privilege user, on an
+**internal-only** Podman network (no published host port). Migrate existing data into it,
+repoint each consumer, and establish automated backups with a **tested restore**.
+
+## Why this is first
+
+All three real apps persist to MariaDB:
+- **System MariaDB 10.11** (`127.0.0.1:3306`) currently hosts `wordpress` and `airsonic`.
+- **Ampache** has its own `ampache-mariadb` (`mariadb:lts`) container.
+
+Consolidating first means every app is pointed at its final DB endpoint exactly once.
+
+## Constraints & etiquette (from master plan §6)
+
+- Use **one persistent `ssh -t linus` session** (sudo); reuse it — SSH is rate-limited to ~3 new
+  connections/min. Read-only recon may use `linux-mcp` tools.
+- SELinux is **Enforcing**; use `:z`/`:Z` on bind mounts and verify `ls -laZ`.
+- Put the DB **data volume and all backups on `/storage`** (1.3 TB) — never `/` (~12 GB free).
+- Pin image tag (`mariadb:lts` to match Ampache); `restart: unless-stopped`; healthcheck;
+  memory limit; json-file log caps.
+- Secrets in a `600` `.env`; commit only `.env.template`. Generate with `openssl rand -base64 24`.
+- **Do not delete or drop any source data** (system MariaDB databases, `ampache-mariadb`
+  volume) — they are the Gate A rollback. Deletion happens only at Gate E.
+
+## Pre-flight discovery (verify before changing anything)
+
+1. Confirm the databases and their sizes in system MariaDB:
+   `sudo mysql -e "SHOW DATABASES; SELECT table_schema, ROUND(SUM(data_length+index_length)/1048576,1) MB FROM information_schema.tables GROUP BY table_schema;"`
+   **Scope (owner):** only the **`wordpress`** and **`airsonic`** schemas matter — do **not**
+   migrate any other user schemas that may exist there. (Ampache data comes from its own
+   `ampache-mariadb` container, not from the host MariaDB.)
+2. Capture each app's DB **user + grants**:
+   `sudo mysql -e "SELECT user,host FROM mysql.user; SHOW GRANTS FOR 'airsonic'@'localhost';"` etc.
+   (WordPress creds are in its `wp-config.php`; Airsonic creds are in
+   `/var/airsonic/airsonic.properties`.)
+3. Confirm Ampache DB name/user from `/opt/ampache/.env` + `docker-compose.yml` (`ampache`/`ampache`).
+4. Note MariaDB versions: system is **10.11**; Ampache container is `mariadb:lts` (newer).
+   Importing 10.11 dumps into a newer LTS is forward-compatible; **run `mariadb-upgrade`**
+   (a.k.a. `mariadb-check --auto-repair` / `mysql_upgrade`) inside the container after import.
+
+## Design to implement
+
+Create repo folder `database/` mirroring the `ampache/` layout:
+
+- `docker-compose.yml` — one service `db` (`container_name: shared-mariadb`, image `mariadb:lts`):
+  - Volume: `/storage/mariadb/data:/var/lib/mysql:Z`
+  - **No `ports:`** stanza (internal network only). phpMyAdmin is being **dropped** (owner
+    decision) so no host-reachable admin port is needed at rest. If you need host access *during*
+    the one-time migration import, either use `podman exec -i` (preferred) or publish to
+    `127.0.0.1:3307` **temporarily** and remove it before Gate A.
+  - Networks: an internal bridge (e.g. `db-backend`) that app stacks will join.
+  - Env: `MARIADB_ROOT_PASSWORD` from `.env` only. Do **not** use the auto
+    `MARIADB_DATABASE/USER` single-db envs — you are creating **three** DBs/users via an
+    init script instead.
+  - Init: mount `./initdb.d:/docker-entrypoint-initdb.d:ro,Z` containing a `01-databases.sql`
+    that `CREATE DATABASE`s the three schemas and creates three users with
+    `GRANT ALL PRIVILEGES ON <db>.* TO '<app>'@'%'` (least-privilege, per-DB only; passwords
+    from env-substituted values — generate the SQL from `.env` in `setup.sh`, don't commit
+    real passwords). Note: init scripts run **only** on an empty data dir; for existing data you
+    import manually (below).
+  - `healthcheck` identical style to Ampache (`healthcheck.sh --connect --innodb_initialized`).
+  - `restart: unless-stopped`, `deploy.resources.limits.memory` (see Performance section — size
+    the container limit above the InnoDB buffer pool), json-file logging caps.
+  - `command:` / a mounted `conf.d/*.cnf` carries the tuning from the Performance section below.
+- `.env.template` — `MARIADB_ROOT_PASSWORD`, `WORDPRESS_DB_PASSWORD`, `AIRSONIC_DB_PASSWORD`,
+  `AMPACHE_DB_PASSWORD` (placeholders only).
+- `initdb.d/01-databases.sql` (or generated by `setup.sh`) — schema + least-priv users.
+- `shared-mariadb.service` — systemd unit like `ampache.service` (rootful `podman compose up`).
+- `backup/` — `mariadb-backup.sh` (logical dump per DB, `--single-transaction`, gzip, timestamped
+  to `/storage/backups/mysql/`, retention e.g. 14 daily), plus
+  `shared-mariadb-backup.service` + `.timer` (daily). Document a **restore** command.
+- `setup.sh` — create `/storage/mariadb/data` + `/storage/backups/mysql`, install compose/env/
+  unit/timer, generate the init SQL from `.env`, enable units. Idempotent, `set -euo pipefail`,
+  mirror `ampache/setup.sh` conventions.
+- `README.md` — deploy steps, migration runbook, backup/restore, troubleshooting.
+
+## Performance review & tuning (owner requirement)
+
+Do a **basic** performance review and size the config to the host's available memory — don't
+over-engineer, but don't ship defaults blindly either.
+
+1. **Measure first.** Record the total on-disk size of the three DBs (from pre-flight discovery
+   `SELECT table_schema, SUM(...) MB ...`) — these catalogs are small (WordPress + a music
+   library index), likely well under ~2 GB combined. Check current host memory headroom with
+   `free -h` / the `linux-mcp` memory tool. The box has **16 GB**; other resident consumers
+   include Airsonic's JVM (~700 MB heap), the Ampache containers (512 MB each), Netdata, etc.,
+   so there is comfortable headroom for a right-sized DB.
+2. **Size the InnoDB buffer pool to fit the working set** rather than to a fixed fraction. If the
+   three DBs total under ~2 GB, an `innodb_buffer_pool_size` of **2 GB** effectively caches the
+   entire dataset in RAM (best case for a small consolidated DB). Do **not** blindly use the
+   "70–80% of RAM" rule — this host shares its 16 GB across many services. Set the container
+   `deploy.resources.limits.memory` **above** the buffer pool (e.g. buffer pool 2 GB → limit
+   ~2.5–3 GB) to leave room for connections, temp tables, and the per-thread buffers.
+3. **Other key settings** (ship via a mounted `conf.d/z-tuning.cnf`):
+   - `innodb_buffer_pool_size` = measured working-set size (see above).
+   - `innodb_log_file_size` = ~25% of buffer pool (e.g. 512M) for write-heavy safety.
+   - `innodb_flush_method = O_DIRECT`, `innodb_flush_log_at_trx_commit = 1` (durable; keep 1
+     unless a measured need justifies 2).
+   - `max_connections` — sum realistic per-app pools (WordPress php-fpm workers + Airsonic pool +
+     Ampache) with headroom; ~100–150 is plenty here. Don't set it huge (each connection
+     reserves per-thread buffers).
+   - `character-set-server = utf8mb4`, `collation-server = utf8mb4_unicode_ci` (WordPress +
+     modern apps expect utf8mb4).
+   - Modest per-thread buffers (`sort_buffer_size`, `join_buffer_size`) — leave near defaults;
+     large values × many connections balloon RAM.
+   - `skip-name-resolve` (auth by IP, avoids DNS stalls — the apps connect by container name/IP).
+   - Slow query log to a file under the data volume for the review, with `long_query_time = 1`.
+4. **Review after load.** Once all apps are migrated and have driven some traffic, capture
+   `SHOW ENGINE INNODB STATUS`, `SHOW GLOBAL STATUS` (buffer-pool hit rate, `Threads_connected`,
+   `Aborted_connects`), and optionally run **`mysqltuner`** (read-only) for a sanity pass.
+   Record the findings + final `.cnf` in `database/README.md`. This "measure → tune → re-measure"
+   note is the deliverable for the owner's performance-review requirement.
+
+## Migration runbook (execute on the server, in order)
+
+> Do this during a low-traffic window. Keep sources intact.
+
+1. **Backup sources first:**
+   - `sudo mysqldump --single-transaction --databases wordpress airsonic > /storage/backups/mysql/pre-migrate-system-$(date +%F).sql`
+   - `sudo podman exec ampache-mariadb sh -c 'mariadb-dump --single-transaction -uroot -p"$MARIADB_ROOT_PASSWORD" --databases ampache' > /storage/backups/mysql/pre-migrate-ampache-$(date +%F).sql`
+2. **Deploy the shared DB container** (empty), let it initialize the three DBs + users.
+3. **Import** each dump into the shared container (via `podman exec -i shared-mariadb mariadb ...`),
+   then run `mariadb-upgrade` inside the container.
+4. **Fix ownership of grants:** app users were created `@'%'` for cross-container access; ensure
+   each app user can connect from the Podman network and is scoped to its own DB only.
+5. **Repoint consumers** (each is reversible):
+   - **Ampache:** edit `/opt/ampache/docker-compose.yml` — remove the `mariadb` service +
+     `depends_on`, set the app's `DB_HOST`/`AMPACHE_DB_*` to the shared DB, and attach the
+     `ampache` container to the `db-backend` network (external network reference). Keep
+     `extra_hosts` hairpin fix. `sudo systemctl restart ampache`. Verify
+     `/rest/ping.view` → `{"status":"ok"}` and `/rest/stream.view` → 200.
+     **Leave `/opt/ampache/mariadb` data on disk** as rollback.
+   - **WordPress (native, still on Apache for now):** update `wp-config.php` `DB_HOST` to reach
+     the shared container. Since native WordPress isn't on the Podman network yet, either
+     temporarily publish the shared DB on `127.0.0.1:3307` **or** (preferred) leave WordPress on
+     the system MariaDB until Task 02 containerizes it and joins the network. **Decide and
+     document**: cleanest is to migrate WordPress's DB pointer as part of Task 02, and in Phase 1
+     only *copy* its data into the shared DB (dual-write window avoided by doing WP cutover in
+     Task 02). Record which approach you took.
+   - **Airsonic (native, still on systemd for now):** same consideration as WordPress — the
+     native service reaches `localhost:3306`. Prefer moving Airsonic's DB pointer during
+     Task 03. In Phase 1, copy its data into the shared DB and verify integrity; leave the
+     system MariaDB copy live for rollback.
+6. **Backups:** enable the backup timer; run it once manually; confirm dumps land in
+   `/storage/backups/mysql`.
+7. **Restore test (required for Gate A):** restore the latest dump into a scratch DB
+   (`CREATE DATABASE restore_test; ... < dump`) inside the container and confirm table counts /
+   a sample row match. Drop the scratch DB after.
+
+> Note on WordPress/Airsonic: because both natively hit `localhost:3306`, the *clean* cut of
+> their DB pointer naturally belongs to their containerization tasks (02/03), where the app
+> joins the `db-backend` network. In Phase 1, your job is: **(a)** shared DB container live and
+> healthy, **(b)** Ampache fully migrated onto it, **(c)** `wordpress` + `airsonic` data
+> copied in and integrity-verified, **(d)** backups + restore proven. Do **not** shut down the
+> system MariaDB in Phase 1 — Tasks 02/03 flip WordPress/Airsonic and Gate E retires it.
+
+## Security checklist
+
+- [ ] Shared DB publishes **no** host-reachable port at rest (internal Podman network only;
+      any temporary `127.0.0.1:3307` removed before Gate A).
+- [ ] Each app user granted **only** its own database; no app uses `root`.
+- [ ] `root` password strong, in `600` `.env`, not committed.
+- [ ] Data dir `/storage/mariadb/data` correct SELinux label + not world-readable.
+- [ ] Backups directory `700`, not web-served.
+- [ ] No real secrets committed to the repo (grep the diff before finishing).
+
+## Verification (Gate A checklist)
+
+- [ ] `sudo podman ps` shows `shared-mariadb` healthy; systemd unit enabled.
+- [ ] `SHOW DATABASES` in the container lists `wordpress`, `airsonic`, `ampache`.
+- [ ] Ampache: `/rest/ping.view` ok and `/rest/stream.view` returns 200 (streaming intact).
+- [ ] WordPress site + `/wp-admin` still load (still on system MariaDB unless you cut it over).
+- [ ] Airsonic UI loads and plays a track (still on system MariaDB unless cut over).
+- [ ] Backup timer enabled; a dump exists; **restore into scratch DB succeeded**.
+- [ ] Rollback data (system MariaDB, `/opt/ampache/mariadb`) untouched.
+
+## Deliverables
+
+- New repo folder `database/` (compose, `.env.template`, init SQL, systemd unit, backup
+  script + timer, `setup.sh`, `README.md`).
+- Updated `/opt/ampache/docker-compose.yml` in the repo (`ampache/docker-compose.yml`) reflecting
+  the external shared DB (remove the `mariadb` service).
+- Root `README.md` + `/memories/repo/fedora-server-config.md` updated with the new DB topology.
+- A short **Gate A status report**: what migrated, what still points where, backup/restore
+  evidence, and any deviations.
+
+## Rollback
+
+- Ampache: restore the `mariadb` service block in its compose + `depends_on`, `systemctl restart
+  ampache` (its `/opt/ampache/mariadb` data is intact).
+- WordPress/Airsonic: unchanged if you deferred their cutover (recommended).
+- Stop/remove the shared DB container; source data is untouched.
+
+**When done: STOP. Report Gate A results and wait for review before Task 02/03 begins.**

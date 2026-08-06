@@ -1,0 +1,35 @@
+# Shared MariaDB tuning — sized to the measured working set, not a blind RAM percentage.
+#
+# Measured 2026-08-03 (see database/README.md "Performance review" for the full writeup):
+#   wordpress ~11.3 MB, airsonic ~53.3 MB, ampache ~2110.8 MB  => ~2.13 GB combined.
+# Host has 16 GB RAM with ~9.4 GB available at measurement time (other consumers: Airsonic
+# JVM heap, the ampache/ampache-mariadb containers themselves, Netdata, etc.).
+#
+# innodb_buffer_pool_size is set comfortably above the current ~2.13 GB working set (room
+# for catalog growth) while leaving most of the host's RAM for everything else. The
+# container's `deploy.resources.limits.memory` (docker-compose.yml) is set above this value
+# to leave room for connection/thread buffers, temp tables, and OS overhead.
+[mariadb]
+innodb_buffer_pool_size = 2304M
+innodb_log_file_size = 512M
+innodb_flush_method = O_DIRECT
+innodb_flush_log_at_trx_commit = 1
+
+# Sum of realistic per-app connection pools (WordPress php-fpm workers + Airsonic pool +
+# Ampache) with headroom. Each connection reserves per-thread buffers, so don't go huge.
+max_connections = 150
+
+# WordPress and modern apps expect utf8mb4; set server-wide so it's consistent across all
+# three shared schemas regardless of what each app's own connection charset requests.
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+# Apps connect by container name/IP over the db-backend network — skip reverse DNS lookups
+# on every connection (avoids DNS-related connection stalls).
+skip-name-resolve
+
+# For the post-migration "measure -> tune -> re-measure" pass (see README). Written inside
+# the data volume so it survives container recreation; rotate/clear manually if it grows.
+slow_query_log = 1
+slow_query_log_file = /var/lib/mysql/slow.log
+long_query_time = 1

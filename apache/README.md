@@ -1,6 +1,22 @@
-# Apache HTTP Server
+# Apache HTTP Server — REMOVED (2026-08-03, Gate E)
 
-Apache (`httpd`) acts as a TLS-terminating reverse proxy for all web services on the server. All certificates are managed by **Let's Encrypt / Certbot**.
+> ## ⛔ FULLY REMOVED — Nginx is the live web tier
+> Apache was replaced by Nginx (`../nginx/`) on 2026-08-03 (Task 04) and **fully removed**
+> (`dnf remove httpd`, `/etc/httpd` deleted) as part of Gate E the same day — see
+> [`../plans/containerization-2026-08/04-apache-to-nginx.agent.md`](../plans/containerization-2026-08/04-apache-to-nginx.agent.md)
+> and [`../plans/containerization-2026-08/README.md`](../plans/containerization-2026-08/README.md).
+> A full tarball of `/etc/httpd` (as it stood right before removal) is kept at
+> `/storage/backups/decommission-2026-08-03/etc-httpd.tar.gz` on the server for reference.
+> This file remains for historical documentation only — nothing below reflects the live system.
+>
+> **Incident note:** during the `dnf remove` of httpd's packages, `nginx` was pulled out as an
+> unrelated dependency cascade (its install "reason" wasn't pinned to `User` at the time) and
+> was briefly removed/killed too — caught and fixed within minutes (`dnf install nginx` +
+> restore `nginx.conf` from the `.rpmsave` copy). See repo memory "Known gotchas" for the full
+> writeup; the lesson is to always dry-run (`dnf remove --assumeno`) and read the *entire*
+> removal list before confirming any `dnf remove` near a live service's dependency tree.
+
+Apache (`httpd`) acted as a TLS-terminating reverse proxy for all web services on the server. All certificates are managed by **Let's Encrypt / Certbot**.
 
 ## Service
 

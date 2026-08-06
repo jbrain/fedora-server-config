@@ -1,0 +1,36 @@
+services:
+  db:
+    image: mariadb:lts
+    container_name: shared-mariadb
+    restart: unless-stopped
+    volumes:
+      - /storage/mariadb/data:/var/lib/mysql:Z
+      - ./conf.d:/etc/mysql/conf.d:ro,Z
+      - ./initdb.d:/docker-entrypoint-initdb.d:ro,Z
+    environment:
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+    # No `ports:` — internal-only. Reachable from other Podman stacks via the
+    # `db-backend` network (container name `shared-mariadb`, port 3306). Any
+    # host-reachable admin access is via `podman exec`, never a published port.
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 3072M
+    networks:
+      - db-backend
+
+networks:
+  # Named explicitly so consumer stacks (ampache, wordpress, airsonic) can join it
+  # as an `external: true` network without needing to know a generated project prefix.
+  db-backend:
+    name: db-backend

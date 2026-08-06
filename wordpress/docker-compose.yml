@@ -1,0 +1,87 @@
+services:
+  wordpress:
+    # Official WordPress image, pinned to the SAME core version currently running
+    # (6.9.4) with php8.4 (matches the host's own PHP 8.4.23 / Fedora 43's default).
+    # Deliberately NOT jumping to the newer 7.0.x major on this migration: the live site
+    # has 4 active plugins (Contact Form 7, Flamingo, Google Sitemap Generator, wp-fail2ban)
+    # plus a custom theme ("jackbrain") that have only ever been tested against 6.9.x — a
+    # same-version container swap isolates "containerize WordPress" from "upgrade WordPress
+    # core", so only ONE risky variable changes at a time. Revisit the major-version upgrade
+    # as a separate, deliberate change later. Fully-qualified reference (registry + repo +
+    # tag) required for `podman auto-update`'s "registry" policy (see ../podman-auto-update/).
+    image: docker.io/library/wordpress:6.9.4-php8.4-apache
+    container_name: wordpress
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8082:80"
+    # Hardening (2026-08-03, post-incident — see repo memory "WordPress account-creation
+    # compromise"): container root filesystem is read-only, so WP core files (the image's own
+    # layer) can never be tampered with in a way that survives a container recreation — verified
+    # via /proc/mounts that the overlay root is genuinely `ro`. Note: /var/www/html itself is
+    # NOT covered by this (the upstream image declares it as a VOLUME, which Docker/Podman keeps
+    # writable regardless of `read_only` — a known quirk), but its contents are fully wiped and
+    # re-copied from the image on every recreate anyway, so nothing written there persists.
+    # wp-content CANNOT also be read-only — the official image's own entrypoint chowns/
+    # reconciles wp-content on every boot and hard-fails if it can't (verified 2026-08-03:
+    # container died instantly with "Read-only file system" tar errors). Write-blocking for
+    # wp-content itself is instead enforced at the WP application layer via
+    # DISALLOW_FILE_EDIT/DISALLOW_FILE_MODS below (no plugin/theme editor, no installs/updates/
+    # uploads through the web UI) — defense in depth, not OS-level immutability.
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      # Only wp-content is bind-mounted — core WordPress files are managed by the image
+      # (recommended upstream pattern). SELinux :Z since this dir is exclusive to this container.
+      - /storage/wordpress/wp-content:/var/www/html/wp-content:Z
+      # Without this, the wp-fail2ban plugin's PHP syslog() calls have nowhere to go inside
+      # the container (no /dev/log at all) and silently no-op — confirmed 2026-08-03 during
+      # the Nginx migration (Task 04). Bind-mounting the host's real journal socket restores
+      # the exact same behavior the native install had (auth-facility messages land in the
+      # host's /var/log/messages per rsyslog.conf, which the fixed `[wordpress]` fail2ban
+      # jail now reads). Mount the RESOLVED target, not the `/dev/log` symlink itself — this
+      # host's `/dev/log -> /run/systemd/journal/dev-log`, and bind-mounting a symlink SOURCE
+      # does not correctly attach to the real socket (verified: it silently produces a dead,
+      # unconnected socket node inside the container instead). No SELinux relabel flag — this
+      # is a device/socket node, not a regular dir.
+      - /run/systemd/journal/dev-log:/dev/log
+      - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro,Z
+    environment:
+      - WORDPRESS_DB_HOST=shared-mariadb
+      - WORDPRESS_DB_NAME=wordpress
+      - WORDPRESS_DB_USER=wordpress
+      - WORDPRESS_DB_PASSWORD=${WORDPRESS_DB_PASSWORD}
+      - WORDPRESS_TABLE_PREFIX=wp_
+      # Owner decision (2026-08-03): simplify the legacy siteurl(=/wordpress)/home(=/) split
+      # inherited from the RPM "WordPress in its own directory" setup to a single URL, since
+      # the container is 100% dedicated to WordPress (no competing static site at the root
+      # anymore). FORCE_SSL_ADMIN + the X-Forwarded-Proto shim keep admin HTTPS-only behind
+      # Apache's (later Nginx's) TLS-terminating reverse proxy.
+      # DISALLOW_FILE_EDIT/DISALLOW_FILE_MODS added 2026-08-03 (post-incident hardening):
+      # blocks the wp-admin plugin/theme editor and any plugin/theme self-update or install
+      # attempt at the WP-core level, on top of the read-only filesystem above (defense in depth).
+      - WORDPRESS_CONFIG_EXTRA=define('WP_HOME','https://jackson-brain.com');define('WP_SITEURL','https://jackson-brain.com');define('FORCE_SSL_ADMIN',true);define('DISALLOW_FILE_EDIT',true);define('DISALLOW_FILE_MODS',true);if(isset($$_SERVER['HTTP_X_FORWARDED_PROTO'])&&$$_SERVER['HTTP_X_FORWARDED_PROTO']==='https'){$$_SERVER['HTTPS']='on';}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    # Opt in to `podman auto-update` (see ../podman-auto-update/README.md) — checks the
+    # registry daily (and after `dnf` transactions) and pulls+restarts on a new digest.
+    labels:
+      - "io.containers.autoupdate=registry"
+    networks:
+      - db-backend
+
+networks:
+  db-backend:
+    external: true
