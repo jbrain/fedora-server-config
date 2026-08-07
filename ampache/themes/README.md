@@ -128,3 +128,35 @@ became system-wide as of Ampache's `Migration773001`). Ampache's admin Preferenc
 4 accounts (`admin`, `jack` — not `music-assistant`, `copilot-admin`). If disabling Trending
 site-wide matters, verify per-account rather than trusting that checkbox.
 
+## Dark theme color palette rework (2026-08-06)
+
+`dark.css`'s accent colors were the stock Ampache "reborn" orange (`#ff9d00`/`#ffc466`,
+untouched by the original fork — see "Bottom line" above), unrelated to the melting Rubik's
+cube branding. Replaced with a palette actually sampled from
+`jackbrain/images/rubix_256.png` (Pillow color-clustering, then hue-shifted to preserve every
+original lightness/saturation relationship so existing WCAG contrast against the `#222`/`#1a1a1a`
+backgrounds was verified, not guessed):
+
+- **Primary (links, focus rings, icon fills, active tab/table-header text): `#0091ff`** — hue
+  taken from the cube's blue face (`#0f68ac` sampled), lightness tuned to 4.9:1 contrast vs
+  `#222`. Hover/lighter variant: `#66bdff` (7.8:1).
+- **Secondary (buttons, row-hover backgrounds, donate CTA): `#ff5f00` / `#cc4c00` / `#c84a00` /
+  `#c24800`** — hue taken from the cube's orange face (`#e86d24` sampled), each shade is the
+  *same* hue-shift applied to the theme's original button-gradient/row-hover shades (so the
+  existing gradient/darkness relationships between them are unchanged, only the hue moved from
+  generic orange to the logo's actual orange).
+- **Status dots: `.user_online` -> `#53b44c`** (cube green, sampled directly), `.user_offline`
+  stays a near-black dim red (`#7f0700`, hue nudged to the cube's red).
+- Two pre-existing **mismatched one-offs** were folded into the new primary blue for
+  consistency: the login-field focus ring (was a mismatched gold border `#f1b720` + blue glow
+  `#9ecaed`) and the two stray `#09c` hover colors (footer, now-playing lyrics) that had nothing
+  to do with the orange system at all.
+- `#c33` (`.error`) was deliberately left alone — it's already almost exactly the cube's
+  sampled red hue (0° vs 3.2°), nothing to gain by touching it.
+- Scope: **`dark.css` only** — `light.css`/`default.css` untouched, since this was requested as
+  a dark-theme-specific change (Ampache's `colors = "Dark,Light"` config selects between them
+  independently, see `theme.cfg.php`).
+- Not touched: the star-rating fill (`ratings/star_rating.png`/`.gif`) — that's an image sprite,
+  not a CSS color, so recoloring it would need actual image editing, out of scope for a CSS
+  palette pass.
+

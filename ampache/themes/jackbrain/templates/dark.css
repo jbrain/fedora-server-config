@@ -26,7 +26,10 @@
 
 :root {
     color-scheme: dark;
-    accent-color: #ff9d00;
+    /* Palette sampled from the melting Rubik's cube logo (ampache/themes/jackbrain/images/rubix_256.png):
+       blue #0091ff = primary (links/focus/icons), orange #ff5f00 = secondary (buttons/hover rows),
+       green #53b44c = status-online, red keeps the existing #c33 (already close to the cube's red hue). */
+    accent-color: #0091ff;
 }
 
 body {
@@ -40,11 +43,11 @@ body {
 }
 
 a {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 a:hover {
-    color: #ffc466;
+    color: #66bdff;
 }
 
 hr {
@@ -68,7 +71,7 @@ button,
 input[type=button],
 input[type=submit],
 .editdialogstyle.ui-dialog .ui-dialog-buttonset button {
-    background-image: linear-gradient(to top, #ff9d00, #cc6200);
+    background-image: linear-gradient(to top, #ff5f00, #cc4c00);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(0, 0, 0, 0.2);
     color: #fff;
 }
@@ -80,7 +83,7 @@ input[type=button]:focus,
 input[type=submit]:hover,
 input[type=submit]:focus,
 .editdialogstyle.ui-dialog .ui-dialog-buttonset button:hover {
-    background-color: #cc6200;
+    background-color: #cc4c00;
 }
 
 button:focus:active,
@@ -99,7 +102,7 @@ input[type=submit]:focus:active {
     color: #555;
     background: #fff;
     background: rgba(255, 255, 255, 0.9);
-    border: 2px solid #ffc763;
+    border: 2px solid #0091ff;
 }
 
 .playlistdialogstyle.ui-dialog .ui-dialog-content,
@@ -133,7 +136,7 @@ input[type=submit]:focus:active {
    Main
    -------------------------- */
 #ajax-loading {
-    color: #ff9d00;
+    color: #0091ff;
     background-image: url('../images/ajax-loader.gif');
 }
 
@@ -147,7 +150,7 @@ input[type=submit]:focus:active {
 }
 
 #sb_Subsearch input[type=text]:focus {
-    border-color: #ff9d00;
+    border-color: #0091ff;
 }
 
 /* --------------------------
@@ -176,8 +179,8 @@ input[type=submit]:focus:active {
 #loginPage #loginbox #usernamefield input:focus,
 #loginPage #loginbox #emailfield input:focus,
 #loginPage #loginbox #passwordfield input:focus {
-    border-color: #f1b720;
-    box-shadow: 0 0 10px #9ecaed;
+    border-color: #0091ff;
+    box-shadow: 0 0 10px rgba(0, 145, 255, 0.5);
 }
 
 #loginPage #loginbox #remembermefield {
@@ -203,7 +206,7 @@ input[type=submit]:focus:active {
 }
 
 #loginPage #footer #donate {
-    color: #ff9d00;
+    color: #ff5f00;
 }
 
 /* --------------------------
@@ -221,7 +224,7 @@ input[type=submit]:focus:active {
 }
 
 #sidebar-header:hover {
-    color: #ffc466;
+    color: #66bdff;
 }
 
 #sidebar_home,
@@ -237,7 +240,7 @@ input[type=submit]:focus:active {
 #sidebar_preferences:hover,
 #sidebar_admin:hover,
 #sidebar_logout:hover {
-    color: #ffc466;
+    color: #66bdff;
 }
 
 #sidebar-content,
@@ -260,7 +263,7 @@ input[type=submit]:focus:active {
 }
 
 #sidebar-tabs .active > a {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 #sidebar-tabs .sb2 li h4 {
@@ -283,11 +286,11 @@ input[type=submit]:focus:active {
 }
 
 .topmenu_item span {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 .topmenu_item:hover {
-    border: 2px solid #ff9d00;
+    border: 2px solid #0091ff;
 }
 
 .image-topmenu-album,
@@ -300,7 +303,7 @@ input[type=submit]:focus:active {
 .image-topmenu-smartlist,
 .image-topmenu-tagcloud,
 .image-topmenu-upload {
-  fill: #ff9d00;
+  fill: #0091ff;
 }
 
 .image-topmenu-album:hover,
@@ -313,7 +316,7 @@ input[type=submit]:focus:active {
 .image-topmenu-smartlist:hover,
 .image-topmenu-tagcloud:hover,
 .image-topmenu-upload:hover {
-  fill: #ffc466;
+  fill: #66bdff;
 }
 
 /* Localplay */
@@ -332,7 +335,7 @@ input[type=submit]:focus:active {
 }
 
 #rightbar #rb_action {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 #rightbar #rb_current_playlist li {
@@ -346,8 +349,8 @@ input[type=submit]:focus:active {
 #rightbar #rb_current_playlist li a:hover,
 #rightbar #rb_current_playlist li a:focus {
     color: #fff;
-    background-color: #c85a00;
-    background-image: linear-gradient(to top, #cc6200, #c24d00);
+    background-color: #c84a00;
+    background-image: linear-gradient(to top, #cc4c00, #c24800);
 }
 
 #rightbar .submenu {
@@ -361,7 +364,7 @@ input[type=submit]:focus:active {
 }
 
 #rightbar .submenu a:hover {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 /* --------------------------
@@ -385,7 +388,7 @@ input[type=submit]:focus:active {
 }
 
 span.page-nb {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 table.tabledata {
@@ -398,12 +401,12 @@ table.tabledata a {
 }
 
 #catalog_type_fields table.tabledata a {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 table.tabledata a:hover,
 table.tabledata a:focus {
-    color: #ffc466;
+    color: #66bdff;
 }
 
 table.tabledata thead .th-top,
@@ -421,13 +424,13 @@ table.tabledata tfoot .th-bottom {
 }
 
 table.tabledata th a {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 table.tabledata tr:hover,
 table.tabledata tr:focus {
-    background-color: #c85a00;
-    background-image: linear-gradient(to top, #cc6200, #c24d00);
+    background-color: #c84a00;
+    background-image: linear-gradient(to top, #cc4c00, #c24800);
 }
 
 table.tabledata .th-top:hover,
@@ -448,7 +451,7 @@ table.tabledata tbody .cel_cover img {
 }
 
 table.tabledata tbody .cel_cover img:hover {
-    border-color: #ff9d00;
+    border-color: #0091ff;
 }
 
 input:invalid {
@@ -467,7 +470,7 @@ input:invalid {
 }
 
 .random_selection .random_album .art_album img:hover {
-    border-color: #ff9d00;
+    border-color: #0091ff;
 }
 
 #content .missing {
@@ -482,14 +485,14 @@ input:invalid {
 }
 
 #now_playing .cel_lyrics a:hover {
-    color: #09c;
+    color: #0091ff;
 }
 
 /* --------------------------
     Content (Tag cloud)
    -------------------------- */
 span.fatalerror {
-    color: #c60;
+    color: #cc4c00;
 }
 
 .box-content #tag_filter .tag_button {
@@ -497,8 +500,8 @@ span.fatalerror {
 }
 
 .box-content #tag_filter .tag_button span:hover {
-    background-color: #c85a00;
-    background-image: linear-gradient(to top, #cc6200, #c24d00);
+    background-color: #c84a00;
+    background-image: linear-gradient(to top, #cc4c00, #c24800);
 }
 
 /* --------------------------
@@ -522,7 +525,7 @@ span.fatalerror {
 }
 
 .item_art:hover {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 #information_actions ul li {
@@ -545,14 +548,14 @@ span.fatalerror {
    Content (Track view)
    -------------------------- */
 dl.media_details dt {
-    color: #c60;
+    color: #cc4c00;
 }
 
 /* --------------------------
    Footer
    -------------------------- */
 #footer a:hover {
-    color: #09c;
+    color: #0091ff;
 }
 
 #ampache_link {
@@ -609,11 +612,11 @@ div.jp-playlist li {
 .jp-type-playlist .jp-playlist a:hover,
 .jp-type-playlist .jp-playlist a:active,
 .jp-type-playlist .jp-playlist a:focus {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 .jp-type-playlist .jp-playlist a.jp-playlist-current {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 /* ------------------------
@@ -627,8 +630,8 @@ div.jp-playlist li {
     --wb-focus-border-color: var(--wb-active-color);
     --wb-drop-source-color: var(--wb-hover-color);
     --wb-drop-target-color: var(--wb-active-color);
-    --wb-hover-color: hsl(29, 100%, 20%);
-    --wb-active-color: hsl(29, 100%, 40%);
+    --wb-hover-color: hsl(22, 100%, 20%);
+    --wb-active-color: hsl(22, 100%, 40%);
     --wb-active-hover-color: var(--wb-active-color);
     --wb-active-color-grayscale: var(--wb-active-color);
     --wb-active-hover-color-grayscale: var(--wb-active-color);
@@ -652,11 +655,11 @@ div.jp-playlist li {
 }
 
 .user_online {
-    background: #0f0;
+    background: #53b44c;
 }
 
 .user_offline {
-    background: #7f0000;
+    background: #7f0700;
 }
 
 .user_disabled {
@@ -682,11 +685,11 @@ a.option-list:hover {
 }
 
 #tabs li a {
-    color: #ff9d00;
+    color: #0091ff;
 }
 
 #tabs li a:hover {
-    color: #ffc466;
+    color: #66bdff;
 }
 
 #tabs li.tab_active a {
