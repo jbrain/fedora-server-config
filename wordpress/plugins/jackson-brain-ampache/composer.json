@@ -1,0 +1,21 @@
+{
+	"name": "jacksonbrain/ampache-integration",
+	"description": "Read-only WordPress/Ampache integration plugin (development).",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"require": {
+		"php": ">=8.1"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^9.6",
+		"brain/monkey": "^2.6"
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"JacksonBrain\\Ampache\\Tests\\": "tests/"
+		}
+	},
+	"scripts": {
+		"test": "phpunit"
+	}
+}

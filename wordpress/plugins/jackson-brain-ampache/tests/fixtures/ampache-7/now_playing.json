@@ -1,0 +1,14 @@
+{
+    "now_playing": [
+        {
+            "id": "9001",
+            "type": "song",
+            "client": "Music Assistant",
+            "expire": 946684800,
+            "user": {
+                "id": "5001",
+                "username": "fixture_listener"
+            }
+        }
+    ]
+}

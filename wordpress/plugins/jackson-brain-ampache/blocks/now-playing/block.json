@@ -1,0 +1,38 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "jackson-brain/ampache-now-playing",
+	"title": "Ampache Now Playing",
+	"category": "widgets",
+	"icon": "controls-play",
+	"description": "Artwork, title, artist, and album for tracks currently playing on the local Ampache server.",
+	"textdomain": "jackson-brain-ampache",
+	"attributes": {
+		"headingLevel": {
+			"type": "number",
+			"default": 2
+		},
+		"showArt": {
+			"type": "boolean",
+			"default": true
+		}
+	},
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ],
+		"spacing": {
+			"margin": true,
+			"padding": true
+		},
+		"color": {
+			"text": true,
+			"background": true
+		},
+		"typography": {
+			"fontSize": true
+		}
+	},
+	"editorScript": "jba-blocks-editor",
+	"style": "jba-blocks",
+	"render": "file:./render.php"
+}

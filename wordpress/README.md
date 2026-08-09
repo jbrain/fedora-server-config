@@ -1,10 +1,15 @@
 # WordPress (`wordpress/`)
 
-Podman container running the official WordPress image, replacing the native RPM install
-(`/usr/share/wordpress`, served by Apache). Points at the **shared MariaDB container**
-(`../database/`). Apache remains the TLS-terminating reverse proxy for now (Nginx is a later
-phase). Part of the [containerization plan](../plans/containerization-2026-08/README.md)
-(Phase 2 / Task 02 — Gate B).
+Podman container running a custom-built WordPress image, replacing the native RPM install
+(`/usr/share/wordpress`, formerly served by Apache). Points at the **shared MariaDB container**
+(`../database/`). **Nginx** is now the TLS-terminating reverse proxy (Apache was fully removed
+host-wide 2026-08-03, Gate E of the [containerization plan](../plans/containerization-2026-08/README.md)).
+
+> **Status: live and hardened (2026-08-08).** Core upgraded to a custom-built `6.9.6`, a real
+> account-creation/webshell compromise was found and remediated twice, and the site now has
+> multiple independent write-prevention/exploit-mitigation layers on top of the original Gate B
+> deployment. See "Security incidents and hardening (2026-08-08)" below for the full summary —
+> full blow-by-blow detail lives in repo memory (`/memories/repo/fedora-server-config.md`).
 
 ## What was actually live before this (non-obvious — verified 2026-08-03)
 
@@ -35,25 +40,26 @@ https://jackson-brain.com/wordpress` (genuinely different values).
 
 ## Image choice
 
-`docker.io/library/wordpress:6.9.4-php8.4-apache` — **the same WordPress core version already
-running** (6.9.4), not the newer 7.0.x line, with PHP 8.4 (matches the host's own PHP 8.4.23 /
-Fedora 43 default — satisfies "at least what the current OS provides"). Deliberately not
-jumping WordPress major versions during containerization: the live site has 4 active plugins
-(**Contact Form 7, Flamingo, Google Sitemap Generator, wp-fail2ban**) and a custom theme
-(**jackbrain**) that have only been tested against 6.9.x. This isolates "containerize
-WordPress" from "upgrade WordPress core" — only one risky variable changes at a time. A
-WordPress major-version upgrade can be done later as its own deliberate, separately-tested
-change (and is easy since `podman auto-update` only re-pulls the *same* pinned tag — see
-below — bumping to 7.x means intentionally editing the tag yourself).
+**Current image: `localhost/wordpress:6.9.6-php8.4-apache`** — a locally custom-built image (see
+`Dockerfile`), not an official Docker Hub tag. WordPress 6.9.4 (the original containerization
+target, matching what was already running) was found to be **insecure** per WordPress's own
+`stable-check` API during 2026-08-08 hardening; 6.9.6 is the fixed release on the *same* major
+line (deliberately not jumping to 7.x — the live site's plugins/theme were never tested against a
+new major, and Docker Hub had no `7.0.3`/`6.9.6`-tagged image published yet either way). The
+Dockerfile rebuilds the official `6.9.4-php8.4-apache` base with the real 6.9.6 core from
+wordpress.org, carefully preserving `wp-config-docker.php` (a Docker-image-specific file not in
+the plain release tarball — losing it once already broke the site for real, see the Dockerfile's
+own header comment). Switch back to an official `wordpress:<version>-php8.4-apache` tag once one
+matching a current security release exists on Docker Hub.
 
 ## Image auto-updates
 
 Opted in to `podman auto-update` (label `io.containers.autoupdate=registry` in
 `docker-compose.yml`) — see [../podman-auto-update/README.md](../podman-auto-update/README.md)
-for the full mechanism (daily timer + a DNF post-transaction hook). Because the image tag is
-pinned to `6.9.4-php8.4-apache`, auto-update only pulls **rebuilds of that exact version**
-(security patches to the same WordPress/PHP combo) — never an unexpected WordPress core
-version jump.
+for the full mechanism (daily timer + a DNF post-transaction hook). **Currently a no-op**: since
+the image is a local custom build (`localhost/...`, no registry to check against), auto-update has
+nothing to pull. Security patches to WordPress core require a manual rebuild via the `Dockerfile`
+until this switches back to an official upstream tag.
 
 ## Deploy
 
@@ -67,10 +73,10 @@ sudo podman ps --filter name=wordpress          # wait for "healthy"
 curl -I http://127.0.0.1:8082/                  # smoke test, backend only
 ```
 
-Then repoint Apache (once the backend is confirmed working):
+Then confirm nginx is pointed at the backend (already the live config — see
+`../nginx/conf.d/jackson-brain.com.conf`, `proxy_pass http://127.0.0.1:8082;`):
 ```bash
-sudo cp apache/vhosts/jackson-brain.com.conf /etc/httpd/conf.d/vhosts/jackson-brain.com.conf
-sudo apachectl configtest && sudo systemctl reload httpd
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ## wp-content migration
@@ -93,72 +99,163 @@ container going live, re-sync: re-dump `wordpress` from the system MariaDB and r
 ## Reverse-proxy / HTTPS correctness
 
 - `WORDPRESS_CONFIG_EXTRA` sets `WP_HOME`/`WP_SITEURL` to `https://jackson-brain.com` and
-  `FORCE_SSL_ADMIN`, plus a shim so `$_SERVER['HTTPS']` reads `'on'` when Apache forwards
+  `FORCE_SSL_ADMIN`, plus a shim so `$_SERVER['HTTPS']` reads `'on'` when nginx forwards
   `X-Forwarded-Proto: https` (prevents redirect loops behind the TLS-terminating proxy).
-- The Apache vhost sends `X-Forwarded-Proto: https` and `X-Forwarded-Host`.
+- The nginx vhost (`../nginx/conf.d/jackson-brain.com.conf`) sends `X-Forwarded-Proto: https`
+  and `X-Forwarded-Host`, rate-limits `/wp-login.php`, blocks `/xmlrpc.php` entirely (403, added
+  2026-08-08 after a real compromise), and denies PHP execution under `wp-content/uploads/`
+  (case-insensitive, covers `.php`/`.phar`/`.phtml`/`.pht`/`.php[0-9]` variants).
 - Upload limits: raised from the RPM install's stock `upload_max_filesize=2M` (never a
   deliberate choice, just Fedora's php.ini default) to **64M** via the mounted `uploads.ini`
   (`post_max_size=64M`, `memory_limit=256M` — WordPress's own documented recommended value).
-  Apache itself has no `LimitRequestBody` set on this vhost, so PHP's limits are the effective
-  ceiling; Nginx's `client_max_body_size` will need to match once Task 04 lands.
+  nginx's `client_max_body_size` is matched to this.
 
-## wp-fail2ban (existing plugin — flagged for Task 04, not fixed here)
+## wp-fail2ban — fixed (2026-08-04)
 
-The **wp-fail2ban** plugin is already active on this site. It's the likely reason a
-`[wordpress]` fail2ban jail exists on the host at all — but that jail is currently
-misconfigured (stale `iptables-multiport` action; see the master plan and Task 04). Whether
-wp-fail2ban's own logging (typically via PHP's `syslog()`, landing in `/var/log/secure` on
-this host) still lines up correctly once Nginx replaces Apache is Task 04's concern — not
-touched here. No regression versus the current (already broken) behavior from this task.
+The **wp-fail2ban** plugin is active; the `[wordpress]` fail2ban jail (host-side,
+`/etc/fail2ban/jail.local` + `filter.d/wordpress.local`) was reconfigured to read
+`/var/log/messages` (where its PHP `syslog()` calls actually land on this host) and its filter
+regex was broadened to also catch XML-RPC brute-force lines (previously silently uncounted —
+see repo memory "fail2ban `[wordpress]` jail was silently blind to XML-RPC brute force"). As of
+2026-08-08 it has banned 96 IPs over its lifetime.
+
+## Jackson Brain Ampache Integration plugin — live and working
+
+Deployed into this container's bind-mounted `wp-content/plugins/jackson-brain-ampache/` (no
+separate compose change needed for the plugin directory itself — it's already covered by the
+existing `wp-content` bind mount). It connects to the Ampache container via its public vhost,
+**`https://music.jackson-brain.com`** — never the container's internal Podman network address,
+since the plugin is a normal HTTPS client of Ampache's own public origin, not a same-network
+service call. Full design/security rationale: `../plans/wordpress-ampache-plugin/`.
+
+Active on the `music` page (blocks: Library Statistics, Now Playing, Recently Played). Setup:
+
+1. Create `./secrets/jba-ampache-api-key` from `./secrets/jba-ampache-api-key.template` with the
+   real key for a dedicated, level-25 Ampache user (never the admin or Music Assistant key).
+   This file is bind-mounted read-only into the container and is never an env var, so it never
+   appears in `docker-compose.yml`, `.env`, or `podman inspect` output.
+2. `JBA_AMPACHE_ORIGIN` is already pinned to `https://music.jackson-brain.com` in
+   `WORDPRESS_CONFIG_EXTRA` above — not a secret, but intentionally read-only in wp-admin.
+3. Recreate the container (`sudo systemctl restart wordpress`) so it picks up the new bind mount.
+4. Activate the plugin, then use "Test connection" and "Refresh now" on its Settings page
+   (**Settings → Ampache Integration**, also linked directly from the plugin's row on the
+   Plugins list page).
+
+**Known Ampache-server-side quirks worked around in the plugin** (this specific Ampache 7.9.8
+install, not a WordPress-side bug — see plugin code comments and repo memory for full detail):
+- `ping`/`handshake`'s summary counts (songs/albums/artists/genres/playlists) always report `0`
+  regardless of real library size — the plugin instead fetches real totals from each of the
+  `songs`/`albums`/`artists`/`genres`/`playlists` list actions' own `total_count` field.
+- The `artists` list action ignores the requested `limit` entirely and returns the full ~4,060-row
+  list (~3.3MB, ~3.5s) regardless — the client's timeout/size budgets are sized to tolerate this
+  for background refreshes (never a public page load).
+- The `songs` list action reliably 500s on this server; that one metric is gracefully omitted
+  rather than failing the whole stats section.
+- WordPress's own SSRF guard (`wp_http_validate_url()`) rejects the configured origin by default
+  since it resolves to a LAN/private IP — worked around with a narrow `http_request_host_is_external`
+  filter scoped to exactly the configured origin host, not a blanket bypass.
+
+## Security incidents and hardening (2026-08-08)
+
+A real account-creation compromise (documented originally 2026-08-03) **recurred** on
+2026-08-08, this time including a live defacement post and 5 PHP webshells uploaded via the
+Media Library disguised with double extensions (`.php_.jpg` etc.). Both incidents were fully
+contained (rogue accounts/posts/webshells deleted, admin password + DB password rotated). Full
+incident detail, root-cause investigation, and the newly-found smoking-gun evidence (every rogue
+account's first successful login happens within seconds of its own creation, from a public IP —
+pointing at a vulnerable plugin endpoint that lets an attacker set the account's password
+directly, not WordPress's normal random-password self-registration flow) live in repo memory.
+
+**Hardening deployed as a direct result** (all verified live, see "Security checklist" below):
+- WordPress core upgraded 6.9.4 → custom-built 6.9.6 (6.9.4 was flagged "insecure" by
+  WordPress's own `stable-check` API).
+- All 5 active plugins updated to latest (Google Sitemap Generator's update in particular fixed
+  CVE-2025-64632, a broken-access-control bug and the strongest concrete lead for how the
+  account-creation compromise actually happens).
+- `xmlrpc.php` blocked entirely at nginx (403).
+- PHP execution blocked in `wp-content/uploads/` at **two independent layers**: an Apache
+  `<Directory>` block (`apache-uploads-no-php.conf`, `php_admin_flag engine off` + a
+  `Require all denied` FilesMatch covering every PHP-executable extension variant) and a
+  broadened, case-insensitive nginx regex — either layer alone would have blocked the
+  2026-08-08 webshells.
+- fail2ban `[wordpress]` jail fixed to actually catch XML-RPC brute force (previously silently
+  uncounted).
+- **Deliberately NOT done**: making `wp-content` read-only at the mount level. Tried and
+  reverted live — the official image's entrypoint always re-syncs core files into
+  `/var/www/html` on every single restart (not just first boot), and that step unconditionally
+  touches `wp-content`'s own top-level directory entries; any part of `wp-content` being `:ro`
+  crashes the container on every restart. See repo memory for full root-cause detail before ever
+  attempting this again.
 
 ## Security checklist
 
 - [x] Container runs as the image's default non-root web user (`www-data`); `wp-content` owned
       by UID/GID 33, not world-writable.
-- [x] DB user is the least-priv `wordpress` user (Task 01), password in `600` `.env`, not
-      committed.
-- [x] PHP execution denied in `wp-content/uploads` (carried over via the vhost's
-      `LocationMatch`).
+- [x] DB user is the least-priv `wordpress` user, password in `600` `.env`, not committed
+      (rotated 2026-08-08 after an accidental plaintext exposure in a terminal transcript).
+- [x] Container root filesystem is `read_only: true` + `tmpfs: [/tmp]` (WP core/image layer
+      cannot be tampered with in a way that survives a recreate).
+- [x] `DISALLOW_FILE_EDIT`+`DISALLOW_FILE_MODS` set (blocks the wp-admin plugin/theme editor and
+      any plugin/theme self-update/install attempt).
+- [x] PHP execution denied in `wp-content/uploads` at **two independent layers** (Apache
+      `<Directory>` block + nginx regex — see "Security incidents and hardening" above).
+- [x] `xmlrpc.php` blocked entirely at nginx (403).
 - [x] Admin only over HTTPS (`FORCE_SSL_ADMIN`).
-- [x] Pinned image tag (`6.9.4-php8.4-apache`); auto-updates scoped to that exact tag only
-      (see Image auto-updates above) — not an open-ended "always latest" policy.
+- [x] fail2ban `[wordpress]` jail actively banning brute-force/XML-RPC attempts.
 - [x] No secrets, no DB dumps committed.
+- [ ] `wp-content` read-only at the mount level — **deliberately not done, see above**; the
+      practical write-blocking for it is the `DISALLOW_FILE_EDIT`/`MODS` + uploads-specific
+      PHP-execution denial instead.
 
-## Verification (Gate B checklist)
+## Verification (Gate B checklist) — all passed
 
-- [ ] `https://jackson-brain.com` loads (front page + a post) with correct HTTPS asset URLs.
-- [ ] `/wp-admin` login works; no redirect loop.
-- [ ] Media upload succeeds and displays (uploads volume persisted on `/storage`).
-- [ ] Existing theme (`jackbrain`) and plugins (Contact Form 7, Flamingo, Google Sitemap
+- [x] `https://jackson-brain.com` loads (front page + a post) with correct HTTPS asset URLs.
+- [x] `/wp-admin` login works; no redirect loop (a `reauth=1` bounce after a container restart is
+      expected — restarts regenerate `wp-config.php`'s auth salts, invalidating existing login
+      cookies; just log in again).
+- [x] Media upload succeeds and displays (uploads volume persisted on `/storage`).
+- [x] Existing theme (`jackbrain`) and plugins (Contact Form 7, Flamingo, Google Sitemap
       Generator, wp-fail2ban) present and active; permalinks resolve.
-- [ ] A new post/comment writes to the shared DB (confirm via `podman exec shared-mariadb`).
-- [ ] TLS still served by Apache; other vhosts unaffected.
-- [ ] Native RPM WordPress no longer serving, but package/files still installed (rollback).
+- [x] A new post/comment writes to the shared DB (confirm via `podman exec shared-mariadb`).
+- [x] TLS served by nginx; other vhosts unaffected.
+- [x] Native RPM WordPress no longer serving (package fully removed 2026-08-03, Gate E).
 
 ## Deliverables
 
-- `wordpress/` (this folder): compose, `.env.template`, `uploads.ini`, systemd unit,
-  `setup.sh`, README.
-- `podman-auto-update/`: host-wide image auto-update mechanism (Podman timer + DNF hook).
-- Updated `apache/vhosts/jackson-brain.com.conf` — now a reverse proxy to `127.0.0.1:8082`,
-  with corrected log filenames and a fixed HTTP→HTTPS redirect.
+- `wordpress/` (this folder): compose, `Dockerfile`, `htaccess`, `apache-uploads-no-php.conf`,
+  `.env.template`, `uploads.ini`, systemd unit, `setup.sh`, `plugins/jackson-brain-ampache/`, README.
+- `podman-auto-update/`: host-wide image auto-update mechanism (Podman timer + DNF hook,
+  currently a no-op for this locally-built image).
+- `nginx/conf.d/jackson-brain.com.conf` — reverse proxy to `127.0.0.1:8082`, xmlrpc block,
+  broadened uploads PHP-execution block, wp-login rate limiting.
 - Root `README.md` + repo memory updated.
 
 ## Rollback
 
-Re-point `jackson-brain.com`'s vhost back to `DocumentRoot /var/www/vhosts/jackson-brain.com`
-(git history has the pre-migration version), `apachectl configtest && systemctl reload httpd`,
-`sudo systemctl stop wordpress`. DB rollback per Task 01 — the system MariaDB still holds the
-`wordpress` schema, untouched.
+`sudo systemctl stop wordpress`, restore `docker-compose.yml`/`Dockerfile` from a prior git
+commit or the `.bak-<timestamp>` files on the server if a specific deployed change needs
+undoing, `sudo systemctl start wordpress`. DB rollback: restore from
+`/storage/backups/mysql/` (daily) or the pre-upgrade dumps in `/storage/backups/manual/`.
+Native RPM WordPress is no longer installed at all (Gate E, 2026-08-03) — there is no native
+fallback path anymore, only container rollback.
 
 ## Troubleshooting
 
 - **Redirect loop on `/wp-admin`**: usually means `X-Forwarded-Proto` isn't reaching WordPress,
   or `WP_SITEURL`/`WP_HOME` don't match the actual public URL. Check
   `curl -I https://jackson-brain.com/wp-admin/` for the `Location` header's scheme.
+- **`wp-admin` bounces to `wp-login.php?...&reauth=1`**: expected after a container restart —
+  `wp-config.php`'s `AUTH_KEY`/`SECRET_KEY`/etc. salts regenerate fresh every recreate (the file
+  isn't persisted), invalidating any existing login cookie. Just log in again; not a compromise.
 - **Mixed content / `http://` asset URLs**: confirm `WORDPRESS_CONFIG_EXTRA` actually landed in
   the container's `wp-config.php` (`podman exec wordpress cat /var/www/html/wp-config.php`).
 - **Upload fails silently past a certain size**: check both the PHP limits (`uploads.ini`) and
-  (once Task 04 lands) Nginx's `client_max_body_size`.
+  nginx's `client_max_body_size`.
 - **Ownership errors on `wp-content`**: this host's native `apache` user is UID/GID **48**, the
   container's `www-data` is UID/GID **33** — don't assume file ownership carries over as-is.
+- **Plugin files silently fail to load after a manual `cp` update** (`Permission denied` on
+  `include_once`, only a warning, not fatal): the `:Z`-mounted bind volume only gets relabeled to
+  `container_file_t` at container *start* time — files added while it's already running keep
+  their source SELinux context. Fix: `systemctl restart wordpress`.
+- **Container crash-loops after touching `wp-content`'s mount options**: do NOT make any part of
+  `wp-content` read-only at the mount level — see "Security incidents and hardening" above.

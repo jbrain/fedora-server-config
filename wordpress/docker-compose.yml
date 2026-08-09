@@ -1,15 +1,17 @@
 services:
   wordpress:
-    # Official WordPress image, pinned to the SAME core version currently running
-    # (6.9.4) with php8.4 (matches the host's own PHP 8.4.23 / Fedora 43's default).
-    # Deliberately NOT jumping to the newer 7.0.x major on this migration: the live site
-    # has 4 active plugins (Contact Form 7, Flamingo, Google Sitemap Generator, wp-fail2ban)
-    # plus a custom theme ("jackbrain") that have only ever been tested against 6.9.x — a
-    # same-version container swap isolates "containerize WordPress" from "upgrade WordPress
-    # core", so only ONE risky variable changes at a time. Revisit the major-version upgrade
-    # as a separate, deliberate change later. Fully-qualified reference (registry + repo +
-    # tag) required for `podman auto-update`'s "registry" policy (see ../podman-auto-update/).
-    image: docker.io/library/wordpress:6.9.4-php8.4-apache
+    # Custom-built image (see ./Dockerfile): official wordpress:6.9.4-php8.4-apache base
+    # with WordPress core swapped for 6.9.6 (2026-08-08) - Docker Hub has not published an
+    # official image for 6.9.5, 6.9.6, or 7.0.3 yet, and confirmed 6.9.4 is flagged
+    # "insecure" by WordPress's own stable-check API while 6.9.6 is the fixed release on
+    # this same major line. Deliberately stays on 6.9.x rather than jumping to 7.x to avoid
+    # combining an untested major-version upgrade (new admin UI, theme/plugin compatibility)
+    # with this security fix - the live site has 4 active plugins (Contact Form 7, Flamingo,
+    # Google Sitemap Generator, wp-fail2ban) plus a custom theme ("jackbrain"). Revisit the
+    # major-version upgrade separately once an official 7.x image with matching security
+    # fixes is available. Switch back to an official `wordpress:<version>-php8.4-apache` tag
+    # once Docker Hub catches up - see Dockerfile's own header comment for the rebuild steps.
+    image: localhost/wordpress:6.9.6-php8.4-apache
     container_name: wordpress
     restart: unless-stopped
     ports:
@@ -33,7 +35,40 @@ services:
     volumes:
       # Only wp-content is bind-mounted — core WordPress files are managed by the image
       # (recommended upstream pattern). SELinux :Z since this dir is exclusive to this container.
+      #
+      # ATTEMPTED 2026-08-08 and REVERTED: splitting this into a :ro root mount + :rw
+      # punch-out for uploads/ only (to block writes to plugins/themes at the kernel
+      # mount-namespace level) CRASHES this container on every single restart, not just
+      # rare recovery. Root cause: the official image's docker-entrypoint.sh always re-runs
+      # its "WordPress not found" tar-based recopy on every restart, because /var/www/html's
+      # CORE files (index.php, wp-includes/, etc.) live on the ephemeral image-declared
+      # VOLUME and are wiped every recreate — only wp-content itself persists via this bind
+      # mount. That recopy step explicitly skips re-copying INTO pre-existing plugin/theme
+      # subdirectories, but it still unconditionally tries to chown+utime the wp-content,
+      # wp-content/plugins, and wp-content/themes directory ENTRIES themselves (tar
+      # reapplies the source archive's ownership/mode to every directory it visits) — which
+      # hard-fails ("Read-only file system") the instant any part of wp-content is :ro,
+      # taking the whole entrypoint (and Apache) down with it. Confirmed live: container
+      # exited, site returned 502, immediately rolled back. See repo memory for full detail
+      # — do NOT retry a :ro/mount-level split on this image without first patching/
+      # replacing docker-entrypoint.sh to exclude wp-content's own top-level dirs, or
+      # confirming a future upstream image no longer recopies unconditionally on restart.
       - /storage/wordpress/wp-content:/var/www/html/wp-content:Z
+      # Defense in depth for the ACTUAL exploited vector (a compromised admin account
+      # uploading PHP webshells disguised as media files via the Media Library, 2026-08-08
+      # incident): disables PHP execution entirely inside uploads/ (any extension, not just
+      # .php/.phar — see ./apache-uploads-no-php.conf) at the Apache config level, which
+      # lives outside wp-content entirely, so it can never be weakened by anything
+      # WordPress itself (or a compromised admin account) can do. This mount path is
+      # independent of wp-content and unaffected by the revert above.
+      - ./apache-uploads-no-php.conf:/etc/apache2/conf-enabled/zz-uploads-no-php.conf:ro,Z
+      # /var/www/html is an ephemeral image-declared VOLUME, wiped on every container
+      # recreate, and nothing here regenerates .htaccess automatically (WordPress only
+      # writes it via a Settings > Permalinks save or flush_rewrite_rules(), and wp-cli
+      # can't write it from a CLI context either) — confirmed live 2026-08-08: every
+      # non-homepage URL 404s without this. Bind-mounted read-only so it always survives
+      # a recreate; see ./htaccess for the exact rewrite rules (standard root-install block).
+      - ./htaccess:/var/www/html/.htaccess:ro,Z
       # Without this, the wp-fail2ban plugin's PHP syslog() calls have nowhere to go inside
       # the container (no /dev/log at all) and silently no-op — confirmed 2026-08-03 during
       # the Nginx migration (Task 04). Bind-mounting the host's real journal socket restores
@@ -46,6 +81,11 @@ services:
       # is a device/socket node, not a regular dir.
       - /run/systemd/journal/dev-log:/dev/log
       - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro,Z
+      # Jackson Brain Ampache Integration plugin: the API key must never be an env var
+      # (visible via `podman inspect`), so it's a bind-mounted secret file instead. Create
+      # ./secrets/jba-ampache-api-key on the host (600, not committed - see
+      # ./secrets/jba-ampache-api-key.template) before starting this container.
+      - ./secrets/jba-ampache-api-key:/run/secrets/jba_ampache_api_key:ro,Z
     environment:
       - WORDPRESS_DB_HOST=shared-mariadb
       - WORDPRESS_DB_NAME=wordpress
@@ -60,7 +100,12 @@ services:
       # DISALLOW_FILE_EDIT/DISALLOW_FILE_MODS added 2026-08-03 (post-incident hardening):
       # blocks the wp-admin plugin/theme editor and any plugin/theme self-update or install
       # attempt at the WP-core level, on top of the read-only filesystem above (defense in depth).
-      - WORDPRESS_CONFIG_EXTRA=define('WP_HOME','https://jackson-brain.com');define('WP_SITEURL','https://jackson-brain.com');define('FORCE_SSL_ADMIN',true);define('DISALLOW_FILE_EDIT',true);define('DISALLOW_FILE_MODS',true);if(isset($$_SERVER['HTTP_X_FORWARDED_PROTO'])&&$$_SERVER['HTTP_X_FORWARDED_PROTO']==='https'){$$_SERVER['HTTPS']='on';}
+      # JBA_AMPACHE_ORIGIN/JBA_AMPACHE_API_KEY: production config for the Jackson Brain Ampache
+      # Integration plugin (plans/wordpress-ampache-plugin/). Origin is canonical/read-only
+      # (music.jackson-brain.com, the Ampache container's public vhost, not a secret); the key
+      # is read from the bind-mounted secret file above so it never appears in this file, an
+      # env var, or container-inspect output.
+      - WORDPRESS_CONFIG_EXTRA=define('WP_HOME','https://jackson-brain.com');define('WP_SITEURL','https://jackson-brain.com');define('FORCE_SSL_ADMIN',true);define('DISALLOW_FILE_EDIT',true);define('DISALLOW_FILE_MODS',true);if(isset($$_SERVER['HTTP_X_FORWARDED_PROTO'])&&$$_SERVER['HTTP_X_FORWARDED_PROTO']==='https'){$$_SERVER['HTTPS']='on';}define('JBA_AMPACHE_ORIGIN','https://music.jackson-brain.com');if(is_readable('/run/secrets/jba_ampache_api_key')){define('JBA_AMPACHE_API_KEY',trim(file_get_contents('/run/secrets/jba_ampache_api_key')));}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 15s
@@ -77,6 +122,10 @@ services:
           memory: 512M
     # Opt in to `podman auto-update` (see ../podman-auto-update/README.md) — checks the
     # registry daily (and after `dnf` transactions) and pulls+restarts on a new digest.
+    # NOTE: this is a NO-OP for the current localhost/-built image (no registry to check
+    # against) — kept only so it resumes working automatically once this switches back to
+    # an official registry-hosted tag. Security patches until then require a manual rebuild
+    # (see ./Dockerfile).
     labels:
       - "io.containers.autoupdate=registry"
     networks:

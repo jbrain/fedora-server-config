@@ -1,0 +1,73 @@
+{
+    "id": "9001",
+    "title": "Fixture Song Title",
+    "name": "Fixture Song Title",
+    "artist": {
+        "id": "8001",
+        "name": "Fixture Artist",
+        "prefix": null,
+        "basename": "Fixture Artist"
+    },
+    "artists": [
+        {
+            "id": "8001",
+            "name": "Fixture Artist",
+            "prefix": null,
+            "basename": "Fixture Artist"
+        }
+    ],
+    "album": {
+        "id": "7001",
+        "name": "Fixture Album",
+        "prefix": null,
+        "basename": "Fixture Album"
+    },
+    "albumartist": {
+        "id": "8001",
+        "name": "Fixture Artist",
+        "prefix": null,
+        "basename": "Fixture Artist"
+    },
+    "disk": 1,
+    "disksubtitle": null,
+    "track": 1,
+    "genre": [
+        {
+            "id": "6001",
+            "name": "Fixture Genre"
+        }
+    ],
+    "playlisttrack": 1,
+    "time": 240,
+    "year": 2000,
+    "format": "mp3",
+    "stream_format": "mp3",
+    "bitrate": 320000,
+    "stream_bitrate": 320000,
+    "rate": 44100,
+    "mode": "cbr",
+    "mime": "audio/mpeg",
+    "stream_mime": "audio/mpeg",
+    "size": 9600000,
+    "mbid": null,
+    "art": "https://example.invalid/image.php?object_id=7001&object_type=album&name=art.jpg",
+    "has_art": true,
+    "flag": false,
+    "rating": null,
+    "averagerating": null,
+    "playcount": 1,
+    "catalog": 1,
+    "composer": null,
+    "channels": 2,
+    "comment": null,
+    "license": null,
+    "publisher": null,
+    "language": null,
+    "lyrics": null,
+    "replaygain_album_gain": null,
+    "replaygain_album_peak": null,
+    "replaygain_track_gain": null,
+    "replaygain_track_peak": null,
+    "r128_album_gain": null,
+    "r128_track_gain": null
+}

@@ -31,7 +31,7 @@ Both data volumes are presented by an **LSI MegaRAID MR9260-4i** controller.
 |---|---|---|
 |---|
 | Nginx | 80 / 443 | — | Reverse proxy for all web services (host package, replaced Apache 2026-08-03; Apache fully removed 2026-08-03 Gate E) |
-| WordPress | 8082 (local) | `https://jackson-brain.com` | Podman container (official image, pinned `6.9.4-php8.4-apache`), migrated from native RPM 2026-08. DB on shared MariaDB. |
+| WordPress | 8082 (local) | `https://jackson-brain.com` | Podman container, custom-built image `localhost/wordpress:6.9.6-php8.4-apache` (official `6.9.4-php8.4-apache` base + real 6.9.6 core, since Docker Hub has no official image for 6.9.5/6.9.6/7.0.3 yet), migrated from native RPM 2026-08. DB on shared MariaDB. Hardened 2026-08-08 after a real compromise (see `wordpress/README.md`). Jackson Brain Ampache Integration plugin live. |
 | Ampache | 8081 (local) | `https://music.jackson-brain.com` | Podman container `ampache` (migrated from Docker 2026-07-16), managed by systemd; DB on the shared MariaDB container. Sole music server as of 2026-08-03 — `musicbox.jackson-brain.com` retired, AirSonic fully decommissioned (2026-08-03, see `airsonic/README.md`). |
 | Shared MariaDB | internal only (no published port) | — | Podman container `shared-mariadb` (`database/`), hosts `wordpress`/`ampache` schemas on the internal `db-backend` network (the `airsonic` schema was dropped 2026-08-03 — never carried live traffic); admin via `podman exec` only (no phpMyAdmin) |
 | Memcached | 11211 (local) | — | — |

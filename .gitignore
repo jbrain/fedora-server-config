@@ -1,6 +1,11 @@
 # Never commit real credentials
 .env
 *.env
+wordpress/secrets/jba-ampache-api-key
+
+# PHP build/test artifacts (regenerable via `composer install`)
+vendor/
+.phpunit.result.cache
 
 # Editor / OS noise
 .DS_Store

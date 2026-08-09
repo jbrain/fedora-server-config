@@ -1,0 +1,23 @@
+# Standard WordPress rewrite rules for a root-level, single-URL install (no subdirectory).
+# Bind-mounted read-only into the container (docker-compose.yml) because /var/www/html is
+# an ephemeral image-declared VOLUME that gets wiped on every container recreate, and
+# nothing in this setup automatically regenerates this file otherwise: WordPress only
+# writes it via save_mod_rewrite_rules(), triggered by saving Settings > Permalinks in
+# wp-admin or a flush_rewrite_rules() call - neither happens automatically on boot, and
+# wp-cli's `rewrite flush` cannot write it from a CLI context either ("Regenerating a
+# .htaccess file requires special configuration"). Confirmed missing/404-on-every-non-
+# homepage-URL after a core-file resync event on 2026-08-08 (see repo memory).
+# BEGIN WordPress
+# The directives (lines) between "BEGIN WordPress" and "END WordPress" are
+# dynamically generated, and should only be modified via WordPress filters.
+# Any changes to the directives between these markers will be overwritten.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+# END WordPress
