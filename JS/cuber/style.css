@@ -1,0 +1,76 @@
+:root {
+	--face-front: #FFF;
+	--face-up: #E87000;
+	--face-right: #3D81F6;
+	--face-down: #DC422F;
+	--face-left: #009D54;
+	--face-back: #F5B400;
+
+	--cube-size: 200px;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	background: #1a1a1a;
+	color: #ddd;
+	font-family: system-ui, sans-serif;
+}
+
+/* Production sizing/position for the cube's mount point, per the plan doc. */
+#the-cube {
+	width: 440px;
+	height: 440px;
+	margin: 40px auto;
+	perspective: 800px;
+}
+
+/* Static placeholder cube proving the CSS 3D transform approach — not the real 27-cubelet cube. */
+.cube {
+	position: relative;
+	width: var(--cube-size);
+	height: var(--cube-size);
+	margin: calc((440px - var(--cube-size)) / 2) auto;
+	transform-style: preserve-3d;
+	transform: rotateX(-30deg) rotateY(-45deg);
+}
+
+.face {
+	position: absolute;
+	width: var(--cube-size);
+	height: var(--cube-size);
+}
+
+.face--front {
+	background: var(--face-front);
+	transform: translateZ(calc(var(--cube-size) / 2));
+}
+
+.face--back {
+	background: var(--face-back);
+	transform: rotateY(180deg) translateZ(calc(var(--cube-size) / 2));
+}
+
+.face--right {
+	background: var(--face-right);
+	transform: rotateY(90deg) translateZ(calc(var(--cube-size) / 2));
+}
+
+.face--left {
+	background: var(--face-left);
+	transform: rotateY(-90deg) translateZ(calc(var(--cube-size) / 2));
+}
+
+.face--up {
+	background: var(--face-up);
+	transform: rotateX(90deg) translateZ(calc(var(--cube-size) / 2));
+}
+
+.face--down {
+	background: var(--face-down);
+	transform: rotateX(-90deg) translateZ(calc(var(--cube-size) / 2));
+}
