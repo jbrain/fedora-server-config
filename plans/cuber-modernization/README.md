@@ -1,9 +1,25 @@
 # Cuber (Rubik's Cube) Animation Modernization
 
-> **Status: Segment 1 complete (2026-08-13) — research + full architecture discovery.**
-> Nothing has been changed on the live site yet. This document is the findings report and
-> proposed phased roadmap; implementation has not started. See "Open questions" at the bottom
-> before Segment 2 begins.
+> **Status: Segment 2 decisions made (2026-08-13).** Owner-approved direction below; Segment 3
+> (implementation) has not started yet.
+
+## Segment 2 decisions (owner, 2026-08-13)
+
+1. **Pathway: owner deferred to the recommendation above — going with Pathway A** (drop
+   Three.js/TWEEN entirely, rewrite as pure modern CSS 3D transforms + native Web Animations
+   API). Same visual result, zero dependencies.
+2. **Interaction**: open to changing the current drag-to-twist/orbit behavior if the rewrite
+   genuinely improves it — but the current interaction (including on mobile/touch) already
+   works well and is the bar to match or beat, not just preserve out of caution.
+3. **`prefers-reduced-motion` + off-screen pause**: approved, conditioned on it being a real
+   efficiency win (battery/CPU) rather than added complexity for its own sake — both qualify
+   (skipping a rAF-less CSS animation loop and pausing offscreen work are net performance wins).
+4. **Dead code cleanup**: approved to remove now rather than waiting for Segment 4. `main.js`
+   deleted from the live server (see "Live cleanup performed" below). The IE-CSS3D renderer path
+   inside `initCube.js`/`initCube.min.js` is left in place for now since it's entangled with the
+   live bootstrap/controls code in the same file — surgically extracting just that path from the
+   current minified bundle would be throwaway work the Segment 3 rewrite already makes moot, so
+   it will simply not exist in the new engine rather than being hand-edited out of the old one.
 
 ## Background
 
@@ -44,7 +60,7 @@ gated `if ( is_page('about') )`:
 5. **`js/cuber.min.js`** (source of the local `JS/cuber/cuber.js` copy) — a Closure-compiled bundle of **THREE r66** (2014), **TWEEN.js r12** (2012), Three's `CSS3DRenderer`, and all `ERNO.*` cube state/render classes. **No WebGL renderer is present at all** — every visible "3D" element is a real DOM `<div>` positioned with CSS 3D transforms; Three.js is used purely as the math/scene-graph layer (`Object3D`, quaternions, camera), never for GPU rendering.
 6. **`js/initCube.min.js`** (source: `initCube.js` — the fuller, unminified version of what's currently in the repo as `JS/cuber/init_cuber.js`) actually bundles **four distinct things** concatenated together:
    - `ERNO.renderers.IeCSS3D` + `ERNO.IeCss3DRenderer` — an Internet-Explorer-specific CSS3D shim, feature-detected via `navigator.userAgent` (`MSIE`/`Trident/`). **Dead weight today.**
-   - `ERNO.Locked` — a **custom, site-specific drag/twist control scheme** (raycasting via an `ERNO.Projector`, mouse + touch), distinct from the library's own default orbit controls. This is what makes the cube interactive (dragging a face twists it), not merely decorative — important to preserve.
+   - `ERNO.Locked` — a **custom, site-specific replacement for the library's default whole-cube arcball orbit control** (`ERNO.Controls`), confirmed via the full upstream source review below. Face-twisting itself (`ERNO.Interaction`, raycasting via `ERNO.Projector`) is a separate, always-on mechanism built into the core bundle regardless of which orbit-control class is chosen — `ERNO.Locked` only keeps the *whole cube's* resting orientation pinned to a fixed, pleasant "hero" viewing angle (matching the `Math.PI*0.1`/`Math.PI*-0.25` offset also applied in the bootstrap) instead of allowing free 360° orbit like the stock `ERNO.Controls`. Still a real, deliberate customization worth preserving — just not the twist mechanic itself.
    - `deviceMotion()` — a gyroscope/device-orientation helper. **Present but never enabled** — its only call site in the bootstrap is commented out.
    - The actual page bootstrap:
      ```js
@@ -105,18 +121,19 @@ API for twist tweening instead of `TWEEN r12`. This eliminates ~130KB of decade-
 code, the entire dead IE-renderer path, and the `main.js`/mount-point fragility in one pass,
 while looking identical to visitors.
 
-**Pathway B** (modern Three.js WebGL) is the alternative if the owner wants an actual visual
-upgrade (real lighting/bevels) rather than a pure modernization — worth a quick "do you want
-it to look better, or just be modern under the hood" decision before Segment 2 starts.
+**Pathway B** (modern Three.js WebGL) was the alternative considered if the owner wanted an
+actual visual upgrade (real lighting/bevels) rather than a pure modernization — the owner chose
+Pathway A (see "Segment 2 decisions" above).
 
 ## Proposed phased roadmap (segments)
 
 - **Segment 1 (this document) — DONE.** Research + full live-architecture discovery, findings
   documented, no code changed.
-- **Segment 2 — Decision + design.** Owner picks a pathway (A / B / hybrid); write a feature-
-  parity checklist (drag-to-twist via `ERNO.Locked`'s behavior, shuffle-on-load, the "purty"
-  palette, the logo sticker face, mobile touch, and any accessibility/perf additions —
-  `prefers-reduced-motion`, `IntersectionObserver`-gated pause when scrolled off-screen).
+- **Segment 2 — Decision + design — DONE (2026-08-13).** Owner picked Pathway A; see "Segment 2
+  decisions" above. Feature-parity checklist for Segment 3 to satisfy: drag-to-twist (always-on
+  `ERNO.Interaction` behavior), the `ERNO.Locked`-style fixed hero viewing angle (not free
+  orbit), shuffle-on-load, the "purty" palette, the logo sticker face, mobile touch parity,
+  `prefers-reduced-motion`, and `IntersectionObserver`-gated pause when scrolled off-screen.
 - **Segment 3 — Implementation.** Build the new engine/state+render layer under `JS/cuber/`
   (or a clean rename), with a standalone local HTML test harness with no WordPress dependency
   for fast iteration.
@@ -127,13 +144,62 @@ it to look better, or just be modern under the hood" decision before Segment 2 s
   `cuber.min.js`/`initCube.min.js`/`cube.js` as an instant server-side revert path during a soak
   period, then clean up.
 
-## Open questions for the owner (before Segment 2 starts)
+## Deeper full-source code review (2026-08-13) — additional findings beyond Segment 1
 
-1. **Pathway**: pure CSS + Web Animations API (zero dependencies, same look) vs. modern
-   Three.js WebGL (visual upgrade) vs. hybrid?
-2. Keep the drag-to-twist interaction exactly as today (`ERNO.Locked`'s behavior), or open to a
-   different interaction model?
-3. Add `prefers-reduced-motion` support and pause-when-off-screen as part of this effort, or
-   out of scope for now?
-4. OK to delete `main.js` and the IE-CSS3D code path immediately (confirmed dead/unused today),
-   or hold until the new engine actually replaces the current one in Segment 4?
+Fetched the actual readable (non-minified) upstream `cuber.js` source
+(`raw.githubusercontent.com/marklundin/cube/master/js/cube/cuber.js`) to review the real engine
+internals rather than the Closure-compiled local copy. The core state/model design (`ERNO.Cube`,
+`ERNO.Cubelet`, `ERNO.Slice`, `ERNO.Group`, `ERNO.Direction`, `ERNO.Queue`, `ERNO.Twist`) is
+genuinely solid, well-commented engineering for its era and worth using as a conceptual reference
+for the rewrite's state layer even though the code itself won't be reused verbatim. Concrete
+issues found beyond Segment 1's findings:
+
+- **Global prototype pollution**: the bundle monkey-patches `Number.prototype` (`.add`,
+  `.scale`, `.lerp`, `.constrain`, ...), `String.prototype` (`.capitalize`, `.toCamelCase`, ...),
+  and `Array.prototype` (`.shuffle`, `.first`, `.last`, `.middle`, ...) directly on JavaScript's
+  built-in types. This is a well-known anti-pattern — a real risk of colliding with a future or
+  third-party addition of the same name (TC39 has added several new `Array.prototype`/
+  `Object` methods since 2014). The rewrite should use plain module-scoped helpers instead of
+  patching built-ins.
+- **Two overlapping math/utility layers bundled together**: `THREE.Math` (clamp, lerp, random
+  helpers) and the custom `_` object + the `Number.prototype` patches above cover much of the
+  same ground redundantly. A rewrite needs at most one small internal utility module (native
+  `Math`/modern array methods cover most of this today without any helper at all).
+- **The vendored THREE r66 itself carries its own historical deprecation baggage**: dozens of
+  `console.warn('DEPRECATED: ...')` compatibility shims for even-older call patterns (e.g.
+  `Vector3.add(a,b)` two-arg form, removed `Matrix4.rotateX/Y/Z` stubs). This is dead weight on
+  top of the already-outdated version, not just "an old version" — it's an old version that was
+  already carrying its own legacy cruft in 2014.
+- **Real aspect-ratio bug**: `ERNO.Cube`'s constructor sets `camera.aspect` once from the full
+  browser window (`WIDTH = window.innerWidth, HEIGHT = window.innerHeight`) at creation time —
+  not from the actual `#the-cube` container box (440×440px). Meanwhile the CSS3D renderer's own
+  render loop *does* continuously call `renderer.setSize(container.clientWidth,
+  container.clientHeight)` from the real container size every frame. This mismatch (a
+  perspective/aspect baked in from the whole window, vs. a render box that's actually a small
+  fixed square) can visibly skew the cube's perspective depending on the browser window's aspect
+  ratio at load time, and never corrects itself on resize. Worth fixing properly in the rewrite
+  (derive aspect from the actual container, and update it on resize/`ResizeObserver`).
+- **Unscoped global listeners**: keyboard twisting (`X`/`Y`/`Z`/`R`/`M`/`L`/... keys) is wired to
+  a single `document`-level `keypress` listener, unconditionally enabled by default
+  (`keyboardControlsEnabled: true`), and isn't scoped to cube focus/hover — pressing one of
+  those keys anywhere on the About page (outside a text field) silently twists the cube. Not a
+  security issue, just a surprising, easy-to-miss side effect worth scoping to the cube's own
+  container in a rewrite. Similarly, `ERNO.Interaction`'s and `ERNO.Controls`' mouse/touch
+  listeners are also bound at the `document` level rather than the cube's own container,
+  meaning every click/touch anywhere on the page runs through the cube's hit-testing logic.
+- **Minor inefficiency, not a bug**: `Cubelet.hasColor()` compares colors via a hex-string round
+  trip (`_.hexToRgb`) instead of comparing against the shared `ERNO.Color` singleton constants
+  directly — harmless today (small, infrequent), but unnecessary indirection to carry into a
+  rewrite.
+- Confirmed the upstream repo ships pre-built bundles only (`cuber.js`, `cuber.min.js`,
+  `cuber.no3D.js` + minified/source-map variants under `js/cube/`) — there is no per-class
+  unminified source tree published, despite the README describing one; the "no3D" naming lines
+  up with this deployment's CSS3D-only, no-WebGL behavior confirmed in Segment 1.
+
+## Live cleanup performed (2026-08-13)
+
+`wp-content/themes/jackbrain/js/main.js` deleted from the live server (confirmed dead/orphaned
+since the 2026-08-08 requirejs fix, zero effect beforehand — see Segment 1 findings). Backed up
+first to `main.js.dead-20260813` in the same directory; verified via directory listing that
+`main.js` is gone and the backup is present. No functional change to the live site (the file had
+zero effect before deletion, since nothing enqueues it anymore).
