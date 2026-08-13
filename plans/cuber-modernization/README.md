@@ -48,12 +48,29 @@ process.
 | # | Sub-phase | Deliverable | Gate to pass before moving on | Status |
 |---|---|---|---|---|
 | 3a | Scaffold + test harness | Standalone `index.html`/CSS under `JS/cuber/` with zero WordPress dependency, a container div, and a visible (even if just a static placeholder cube) page for local browser testing | Opens directly in a browser with no server, no console errors | **PASSED (2026-08-13)** — built by subagent, independently verified: screenshot shows correctly proportioned/colored static cube, a fresh Playwright console capture shows exactly one log line and zero errors/warnings |
-| 3b | State/model layer | ES module(s): cube state, cubelet addressing, slice/group logic, twist command parsing, direction relationships — conceptually mirrors `ERNO.Cube`/`Cubelet`/`Slice`/`Direction`/`Twist`/`Queue` but real `class` syntax, no prototype monkey-patching, no bundled math library | A plain-console/unit-test check reproduces upstream's own documented equalities (`FRONT.getOpposite() === BACK`, `FRONT.getClockwise() === RIGHT`, etc. from the README) with zero mutation of built-in prototypes | **IN PROGRESS.** Delegable portion done + independently re-verified: `src/color.js`, `src/direction.js`, `src/twist.js` — all 16 required README equalities re-run from scratch and pass, zero prototype mutations confirmed. **Remaining (kept in this thread, not delegated, per the delegation table's risk call): `src/cubelet.js` addressing, and the slice/group rotation-remapping algorithm** — the one place a subtle bug produces a visually-plausible-but-wrong cube. Plan: implement using plain integer coordinate math (since every cube rotation is a 90°-multiple around a cardinal axis, this needs no vector/quaternion library at all — a real simplification over upstream's general-purpose Three.js matrix math), and validate empirically against the OLD vendor bundle's actual live behavior (`cuber.js`, kept specifically for this purpose) as ground truth for the rotation sign conventions, rather than re-deriving them from first-principles reasoning alone. |
+| 3b | State/model layer | ES module(s): cube state, cubelet addressing, slice/group logic, twist command parsing, direction relationships — conceptually mirrors `ERNO.Cube`/`Cubelet`/`Slice`/`Direction`/`Twist`/`Queue` but real `class` syntax, no prototype monkey-patching, no bundled math library | A plain-console/unit-test check reproduces upstream's own documented equalities (`FRONT.getOpposite() === BACK`, `FRONT.getClockwise() === RIGHT`, etc. from the README) with zero mutation of built-in prototypes | **PASSED (2026-08-13).** `src/color.js`, `src/direction.js`, `src/twist.js`, `src/cubelet.js`, `src/rotation.js`, `src/solved-color-map.js`, `src/cube.js`. All 16 required README equalities pass; `src/cube.test.mjs` (permanent regression test, run with plain `node`) independently validates the remapping logic against the original engine's actual live output for all 9 real twist commands (R/L/M/U/D/E/F/S/B) — full 27-cubelet exact match for R/U/F, targeted spot-checks for the rest, plus round-trip/inverse/shuffle sanity checks — 18/18 pass. See "Ground-truth findings" below for what this uncovered. Whole-cube X/Y/Z keyboard pseudo-rotation was deliberately NOT ported — it's not on the feature-parity checklist and was only ever an accidental side effect of the old document-level keyboard-listener bug (see Segment 1 findings), not a real product requirement. |
 | 3c | Render layer | CSS custom-property-driven transforms for all 27 cubelets, replacing `ERNO.renderers.CSS3D` | Static (non-interactive) cube renders correctly in the harness at the right size/perspective, matching a production screenshot side-by-side | Not started |
 | 3d | Interaction layer | Drag-to-twist a face + fixed hero-angle whole-cube orbit (matching `ERNO.Interaction` + `ERNO.Locked`'s behavior) | Manual test pass on desktop (mouse) and a real mobile device/touch emulation — must feel at least as good as production, not just "technically works" | Not started |
 | 3e | Animation | WAAPI-driven twist tweening + shuffle-on-load + idle autorotate | Twist timing/easing feels equivalent to the `TWEEN.Easing.Quartic.Out` original side-by-side | Not started |
 | 3f | Accessibility/perf | `prefers-reduced-motion` handling, `IntersectionObserver` pause-when-offscreen | Confirmed both behaviors trigger correctly (devtools media-feature override + scroll test) | Not started |
 | 3g | Theme integration | Rewrite `functions.php`'s enqueue chain, mount into `#the-cube` directly (not `#container`), remove the old vendor files | Full feature-parity checklist (below) passes on the live About page; old files kept as instant rollback per the master roadmap's Segment 5 | Not started |
+
+### Ground-truth findings from 3b (why empirical validation mattered here)
+
+Built a temporary (now permanent) `JS/cuber/groundtruth.html` harness that loads the OLD vendor
+bundle directly and exposes a `snapshot()`/`applyTwist()` API to inspect its real live behavior.
+This was essential, not just a nice-to-have: reasoning about twist rotation signs from first
+principles got the wrong answer for several commands. Confirmed by direct measurement:
+
+- `R`, `U`, `F` (the three "positive" reference faces) share one rotation sign.
+- `L`, `D`, `B` (their opposite faces) are the geometric **inverse** of R/U/F, even though all
+  six are "clockwise" in their own uppercase notation — this matches real Rubik's-cube notation
+  but is easy to get backwards if derived rather than measured.
+- The three middle slices do **not** follow one consistent rule: `M` matches `L`'s direction
+  (opposite of `R`), but `E` and `S` both match `U`/`F` (not `D`/`B`) — a genuinely asymmetric,
+  non-obvious pattern that would have been very easy to get wrong by assuming symmetry with `M`.
+- All of this is encoded in `src/cube.js`'s `COMMANDS` table with an explicit comment warning
+  against "simplifying" it from assumed symmetry without re-measuring.
 
 ### Feature-parity checklist (checked at every gate, not just the end)
 

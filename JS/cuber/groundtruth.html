@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Ground truth (old bundle)</title></head>
+<body>
+<div id="container" style="width:400px;height:400px;"></div>
+<script src="./cuber.js"></script>
+<script>
+window.cube = new ERNO.Cube({
+	autoRotate: false,
+	mouseControlsEnabled: false,
+	keyboardControlsEnabled: false,
+	hideInvisibleFaces: false
+});
+document.getElementById('container').appendChild(cube.domElement);
+
+// Serializes id -> {address, faces:[frontColor,upColor,rightColor,downColor,leftColor,backColor]}
+window.snapshot = function () {
+	var out = {};
+	cube.cubelets.forEach(function (c) {
+		out[c.id] = {
+			address: c.address,
+			faces: c.faces.map(function (f) { return f.color.name; })
+		};
+	});
+	return out;
+};
+
+// Applies a twist command and resolves once the tween/queue has fully settled.
+window.applyTwist = function (command, degrees) {
+	return new Promise(function (resolve) {
+		cube.twist(new ERNO.Twist(command, degrees));
+		var check = function () {
+			if (cube.twistQueue.future.length === 0 && cube.isTweening() === 0) {
+				resolve();
+			} else {
+				requestAnimationFrame(check);
+			}
+		};
+		requestAnimationFrame(check);
+	});
+};
+
+window.ready = true;
+</script>
+</body>
+</html>
