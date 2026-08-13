@@ -39,6 +39,18 @@ const COMMANDS = {
   Z: { axis: 'z', sign: 1, filter: () => true },
 };
 
+// Exposes a command's axis + intrinsic sign without duplicating the ground-truthed
+// table above elsewhere (the interaction layer needs this to convert a drag's
+// "axis-natural-sign" rotation amount into the correctly-cased command letter -
+// see plans/cuber-modernization/README.md's Segment 3d/3e notes on why this
+// matters: two independently-derived sign conventions silently disagreeing is
+// exactly the kind of bug this project has hit more than once).
+export function getCommandAxisAndSign(command) {
+  const spec = COMMANDS[command.toUpperCase()];
+  if (!spec) throw new Error(`Unknown twist command: ${command}`);
+  return { axis: spec.axis, sign: spec.sign };
+}
+
 // Production's actual default shuffle move set (ERNO.Cube's PRESERVE_LOGO) -
 // deliberately excludes F/M/E because they'd rotate or move the front-center
 // logo-sticker cubelet. Ground-truthed from the original engine's own source
@@ -57,6 +69,10 @@ export class Cube {
   }
 
   // Applies one twist (either a Twist instance, or a command letter + optional degrees).
+  // Returns { twist, axis, modelDegrees, cubelets } where `cubelets` is the affected
+  // cubelets' PRE-twist {id, x, y, z} - the animation layer needs this to sweep a
+  // smooth rotational arc from the old position rather than jump straight to the new
+  // one (see plans/cuber-modernization/README.md's Segment 3e notes).
   twist(commandOrTwist, degrees) {
     const t = commandOrTwist instanceof Twist ? commandOrTwist : new Twist(commandOrTwist, degrees);
     const spec = COMMANDS[t.command.toUpperCase()];
@@ -65,6 +81,7 @@ export class Cube {
     const quarterTurns = Math.round((t.degrees ?? 90) / 90);
     const effectiveSign = spec.sign * t.vector;
     const affected = this.cubelets.filter(spec.filter);
+    const preTwistPositions = affected.map((c) => ({ id: c.id, x: c.x, y: c.y, z: c.z }));
 
     // Compute every affected cubelet's new position/orientation from the CURRENT
     // (pre-twist) state before mutating any of them, so cubelets never see each
@@ -93,12 +110,17 @@ export class Cube {
     });
 
     this._reindexByAddress();
-    return t;
+    return { twist: t, axis: spec.axis, modelDegrees: effectiveSign * quarterTurns * 90, cubelets: preTwistPositions };
   }
 
   // Shuffles with `amount` random twists, never immediately reversing the previous one.
-  shuffle(amount = 25) {
+  // `onEachTwist(result)`, if given, is awaited after each individual twist - the caller
+  // can use this hook to animate each step (see main.js) without duplicating this
+  // random-non-reversing selection logic. Without it, shuffles happen instantly/
+  // synchronously (e.g. for tests).
+  async shuffle(amount = 25, onEachTwist) {
     let lastInverseCommand = null;
+    const results = [];
     for (let i = 0; i < amount; i++) {
       let command;
       do {
@@ -106,9 +128,12 @@ export class Cube {
         if (Math.random() < 0.5) command = command.toLowerCase();
       } while (command === lastInverseCommand);
 
-      const twist = this.twist(command);
-      lastInverseCommand = twist.getInverse().command;
+      const result = this.twist(command);
+      results.push(result);
+      lastInverseCommand = result.twist.getInverse().command;
+      if (onEachTwist) await onEachTwist(result);
     }
+    return results;
   }
 
   isSolved() {

@@ -68,6 +68,15 @@ body {
 	position: absolute;
 	width: var(--cube-size);
 	height: var(--cube-size);
+	/* Rounds each face's own corners, not just the inset sticker - without this the
+	   cube's outer silhouette (and the seams between adjacent cubelets) is a sharp
+	   rectangle, which looks like it's clipping into neighbors/the background instead
+	   of the beveled-edge look a real Rubik's cube has. Kept small: flat faces have no
+	   real edge/corner bevel geometry, so a bigger radius reveals whatever's spatially
+	   behind that pixel (an adjacent cubelet's differently-colored face) instead of dark
+	   plastic - see plans/cuber-modernization/README.md if this needs a proper fix later.
+	*/
+	border-radius: 4%;
 }
 
 /* Inset colored square within a face, leaving a visible dark "plastic" border - matches

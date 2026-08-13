@@ -1,4 +1,6 @@
 import { positionTransform } from './render.js';
+import { animateSettle, cssSweepDegrees } from './animation.js';
+import { getCommandAxisAndSign } from './cube.js';
 
 // Interaction model (ground-truthed against the original engine - see
 // plans/cuber-modernization/README.md's "Ground-truth findings for 3d"):
@@ -70,6 +72,7 @@ function pickBestAxis(candidateAxes, groupElement, dragX, dragY) {
 
 export function attachInteraction({ cube, containerElement, groupElement, onCommitted }) {
   let drag = null;
+  let isSettling = false; // blocks starting a new gesture while a previous one's settle animation plays
 
   function reset() {
     drag = null;
@@ -113,13 +116,15 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
   // model isn't touched until the gesture ends (mirrors the original engine's own
   // "state and visuals stay separate" design, see plans/cuber-modernization/README.md).
   //
-  // `resolved.screen` is the AXIS direction projected to screen space by a unit
-  // vector, so its own magnitude (`resolved.length`) is <= 1, not in pixels - it
-  // must be normalized to a true unit vector before dotting with the (pixel-scale)
-  // drag delta, then scaled by a fixed pixels-per-quarter-turn constant. An earlier
-  // version of this divided by `length * length` directly against pixel deltas,
-  // producing wildly wrong (10,000+ degree) results - caught by testing an actual
-  // simulated drag, not by inspection.
+  // Returns degrees in the AXIS's own natural-sign convention (matching `rotateSteps`'s
+  // `sign: 1` case for that axis) - NOT a specific command's sign, and NOT yet CSS
+  // degrees (see cssSweepDegrees). `resolved.screen` is the axis direction projected to
+  // screen space by a unit vector, so its own magnitude (`resolved.length`) is <= 1, not
+  // in pixels - it must be normalized to a true unit vector before dotting with the
+  // (pixel-scale) drag delta, then scaled by a fixed pixels-per-quarter-turn constant.
+  // An earlier version of this divided by `length * length` directly against pixel
+  // deltas, producing wildly wrong (10,000+ degree) results - caught by testing an
+  // actual simulated drag, not by inspection.
   function previewDegrees(resolved, dx, dy) {
     const unitX = resolved.screen.x / resolved.length;
     const unitY = resolved.screen.y / resolved.length;
@@ -127,23 +132,24 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
     return (projectedPixels / PIXELS_PER_QUARTER_TURN) * 90;
   }
 
-  function applyPreview(resolved, degrees) {
+  // `axisDegrees` is in the axis's own natural-sign convention (see previewDegrees) -
+  // must go through cssSweepDegrees before use as an actual CSS rotate angle, or a
+  // Y-axis drag renders backwards relative to what gets committed (ground-truthed:
+  // CSS rotateY is inverted relative to the model's own sign, rotateX/rotateZ are not
+  // - see animation.js). Getting this wrong here is invisible until the settle
+  // animation exposes it as a direction reversal - it was caught exactly that way.
+  function applyPreview(resolved, axisDegrees) {
     const rotateFn = { x: 'rotateX', y: 'rotateY', z: 'rotateZ' }[resolved.axisName];
+    const cssDegrees = cssSweepDegrees(resolved.axisName, axisDegrees);
     resolved.affectedCubelets.forEach((cubelet) => {
       cubeletElement(cubelet.id).style.transform =
-        `${rotateFn}(${degrees}deg) ${positionTransform(cubelet.x, cubelet.y, cubelet.z)}`;
-    });
-  }
-
-  function clearPreview(resolved) {
-    resolved.affectedCubelets.forEach((cubelet) => {
-      cubeletElement(cubelet.id).style.transform = positionTransform(cubelet.x, cubelet.y, cubelet.z);
+        `${rotateFn}(${cssDegrees}deg) ${positionTransform(cubelet.x, cubelet.y, cubelet.z)}`;
     });
   }
 
   function onPointerDown(event) {
     if (event.button !== undefined && event.button !== 0) return;
-    if (cube.isAnimating) return; // hook for 3e's tween queue; Cube has no such flag yet
+    if (isSettling) return; // don't let a new gesture fight an in-progress settle animation
 
     const faceEl = event.target.closest('.face');
 
@@ -169,27 +175,65 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
     if (resolved) applyPreview(resolved, previewDegrees(resolved, dx, dy));
   }
 
-  function onPointerUp(event) {
+  // On release: settles smoothly from wherever the live preview left off, rather than
+  // snapping instantly - this is the "slightly magnetized" feel the owner specifically
+  // asked to preserve. A committed twist settles onward to the nearest 90-degree
+  // position; an abandoned (too-short, too-slow) drag settles BACK to 0 instead.
+  async function onPointerUp(event) {
     if (!drag) return;
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
     const elapsed = performance.now() - drag.startTime;
     const resolved = drag.resolved;
+    reset();
 
-    if (resolved) {
-      const degrees = previewDegrees(resolved, dx, dy);
-      const velocity = Math.hypot(dx, dy) / elapsed;
-      let quarterTurns = Math.round(degrees / 90);
-      if (quarterTurns === 0 && velocity > SWIPE_VELOCITY) {
-        quarterTurns = degrees >= 0 ? 1 : -1;
-      }
+    if (!resolved) return;
 
-      clearPreview(resolved);
-      if (quarterTurns !== 0) cube.twist(resolved.command, quarterTurns * 90);
+    const axisDegrees = previewDegrees(resolved, dx, dy);
+    const velocity = Math.hypot(dx, dy) / elapsed;
+    let quarterTurns = Math.round(axisDegrees / 90);
+    if (quarterTurns === 0 && velocity > SWIPE_VELOCITY) {
+      quarterTurns = axisDegrees >= 0 ? 1 : -1;
+    }
+
+    isSettling = true;
+    const fromCssDegrees = cssSweepDegrees(resolved.axisName, axisDegrees);
+
+    if (quarterTurns === 0) {
+      // Didn't commit to a turn - settle back to the original, unrotated position.
+      await animateSettle({
+        containerElement,
+        axis: resolved.axisName,
+        cubelets: resolved.affectedCubelets.map((c) => ({ id: c.id, x: c.x, y: c.y, z: c.z })),
+        fromDegrees: fromCssDegrees,
+        toDegrees: 0,
+      });
+    } else {
+      // Convert "axis-natural-sign quarter turns" into the correctly-cased command
+      // letter + always-positive degrees - the command's OWN sign (ground-truthed in
+      // cube.js, e.g. M is opposite of R despite sharing the x axis) may or may not
+      // match the axis's natural sign, so this can't just reuse `resolved.command`
+      // and `quarterTurns * 90` directly (that was the actual bug: a Y-axis or
+      // opposite-signed-letter drag would preview correctly but commit to the wrong
+      // rotation, only visible once the settle animation exposed the mismatch).
+      const { sign: commandSign } = getCommandAxisAndSign(resolved.command);
+      const wantsPositiveCommandDirection = Math.sign(quarterTurns) === commandSign;
+      const command = wantsPositiveCommandDirection
+        ? resolved.command.toUpperCase()
+        : resolved.command.toLowerCase();
+
+      const result = cube.twist(command, Math.abs(quarterTurns) * 90);
+      await animateSettle({
+        containerElement,
+        axis: result.axis,
+        cubelets: result.cubelets,
+        fromDegrees: fromCssDegrees,
+        toDegrees: cssSweepDegrees(result.axis, result.modelDegrees),
+      });
       onCommitted();
     }
 
-    reset();
+    isSettling = false;
   }
 
   containerElement.addEventListener('pointerdown', onPointerDown);
