@@ -1,7 +1,8 @@
 # Cuber (Rubik's Cube) Animation Modernization
 
-> **Status: Segment 2 decisions made (2026-08-13).** Owner-approved direction below; Segment 3
-> (implementation) has not started yet.
+> **Status: Segment 3 strategy defined (2026-08-13).** Implementation has not started yet —
+> see "Segment 3 execution strategy" for the sub-phase plan, review gates, and delegation rules
+> before any code is written.
 
 ## Segment 2 decisions (owner, 2026-08-13)
 
@@ -20,6 +21,84 @@
    live bootstrap/controls code in the same file — surgically extracting just that path from the
    current minified bundle would be throwaway work the Segment 3 rewrite already makes moot, so
    it will simply not exist in the new engine rather than being hand-edited out of the old one.
+
+## Segment 3 execution strategy (2026-08-13)
+
+Segment 3 is the largest, highest-judgment part of this project (a full engine rewrite), so it's
+broken into small sub-phases with an explicit gate after each one — no sub-phase starts until the
+previous one's gate passes. This mirrors the gate discipline already used elsewhere in this repo
+(`plans/containerization-2026-08/`, `plans/wordpress-ampache-plugin/`) rather than inventing a new
+process.
+
+### Non-goals (locked for all of Segment 3 — anything here is scope creep, not a "nice to have")
+
+- No solver, no keyboard-shortcut parity beyond what already ships (and see the aspect/keyboard
+  bugs below — those get *fixed*, not carried forward as-is).
+- No WebGL/Three.js/any 3D library — Pathway A is CSS transforms + WAAPI only, zero new
+  dependencies, no bundler/build step introduced to support one.
+- No visual redesign — palette, logo sticker, sizing, and behavior must match production, not
+  "while we're in there" improvements to the look.
+- No touching the live theme/server until Segment 3g explicitly, and even then only the enqueue
+  chain — no unrelated theme/`functions.php` cleanup bundled in.
+- No re-litigating Segment 2's Pathway A decision. If Pathway A turns out to be a dead end for
+  some concrete technical reason, that's a stop-and-report event, not a silent pivot to Pathway B.
+
+### Sub-phases and gates
+
+| # | Sub-phase | Deliverable | Gate to pass before moving on |
+|---|---|---|---|
+| 3a | Scaffold + test harness | Standalone `index.html`/CSS under `JS/cuber/` with zero WordPress dependency, a container div, and a visible (even if just a static placeholder cube) page for local browser testing | Opens directly in a browser with no server, no console errors |
+| 3b | State/model layer | ES module(s): cube state, cubelet addressing, slice/group logic, twist command parsing, direction relationships — conceptually mirrors `ERNO.Cube`/`Cubelet`/`Slice`/`Direction`/`Twist`/`Queue` but real `class` syntax, no prototype monkey-patching, no bundled math library | A plain-console/unit-test check reproduces upstream's own documented equalities (`FRONT.getOpposite() === BACK`, `FRONT.getClockwise() === RIGHT`, etc. from the README) with zero mutation of built-in prototypes |
+| 3c | Render layer | CSS custom-property-driven transforms for all 27 cubelets, replacing `ERNO.renderers.CSS3D` | Static (non-interactive) cube renders correctly in the harness at the right size/perspective, matching a production screenshot side-by-side |
+| 3d | Interaction layer | Drag-to-twist a face + fixed hero-angle whole-cube orbit (matching `ERNO.Interaction` + `ERNO.Locked`'s behavior) | Manual test pass on desktop (mouse) and a real mobile device/touch emulation — must feel at least as good as production, not just "technically works" |
+| 3e | Animation | WAAPI-driven twist tweening + shuffle-on-load + idle autorotate | Twist timing/easing feels equivalent to the `TWEEN.Easing.Quartic.Out` original side-by-side |
+| 3f | Accessibility/perf | `prefers-reduced-motion` handling, `IntersectionObserver` pause-when-offscreen | Confirmed both behaviors trigger correctly (devtools media-feature override + scroll test) |
+| 3g | Theme integration | Rewrite `functions.php`'s enqueue chain, mount into `#the-cube` directly (not `#container`), remove the old vendor files | Full feature-parity checklist (below) passes on the live About page; old files kept as instant rollback per the master roadmap's Segment 5 |
+
+### Feature-parity checklist (checked at every gate, not just the end)
+
+Carried over from Segment 2 decisions — nothing proceeds if any of these regress:
+drag-to-twist a face · fixed hero-angle orbit (not free 360°) · shuffle-on-load · idle
+autorotate · the "purty" color palette · the logo sticker face · mobile/touch parity ·
+`prefers-reduced-motion` · off-screen pause. Plus two *fixes* carried as requirements, not
+optional extras: correct aspect ratio tied to the actual container (not `window.innerWidth`),
+and cube controls scoped to the cube's own element (not global `document` listeners).
+
+### Anti-drift / anti-bloat mechanisms
+
+- **Checklist-gated, not vibes-gated**: a sub-phase's gate is the literal checklist row above —
+  if it doesn't pass, the next sub-phase doesn't start, full stop.
+- **Size discipline**: flag it explicitly if any single sub-phase's module ends up larger/more
+  complex than the upstream code it replaces — the entire point is a smaller, simpler
+  replacement, not a same-size rewrite in a different style.
+- **"Zoom out" check at every gate**: does this still look and behave identically to production,
+  and is the code doing less than what it replaced (fewer files, no vendored libraries, no
+  global monkey-patching)? If a gate review can't answer both "yes," stop and report rather than
+  continuing to the next sub-phase.
+- **No silent scope changes**: if something in Segment 1/2's findings turns out to be wrong or a
+  sub-phase reveals a new constraint, that gets written back into this document at the point it's
+  discovered, not discovered again later.
+
+### Delegation plan (what goes to a subagent vs. stays with this thread)
+
+Mechanical, well-specified, low-ambiguity sub-phases are good subagent candidates; anything where
+a subtle correctness or fidelity judgment call matters stays here for direct review:
+
+| Sub-phase | Delegate? | Why |
+|---|---|---|
+| 3a (scaffold/harness) | **Yes** | Pure boilerplate, no correctness risk, easy to eyeball-verify |
+| 3b (state/model) | **Partially** — delegate porting the static data (color constants, direction relationship table) with the upstream equalities as an explicit spec to satisfy; keep the twist/slice remapping math in this thread | The remapping math is the one place a subtle bug silently produces a visually-plausible-but-wrong cube; static data has a checkable spec |
+| 3c (render layer) | **No** (own the CSS transform math), **but** the repetitive per-cubelet DOM/class scaffolding can be delegated once the transform approach is proven on one cubelet | Same pattern as 3b — prove the risky part first, delegate the repetitive part |
+| 3d (interaction) | **No** | Owner explicitly called out current interaction quality as the bar to match; this needs hands-on testing, not a spec-and-check handoff |
+| 3e (animation) | **Partially** — easing/timing values can be delegated once the WAAPI wiring pattern is proven | Low risk once the pattern exists |
+| 3f (a11y/perf) | **Yes** | Small, well-defined, easy to verify pass/fail |
+| 3g (theme integration) | **No** | Touches the live production theme directly |
+
+### Immediate next action
+
+Ready to start **3a** (scaffold + test harness) as the first, lowest-risk sub-phase — say the
+word and it'll be delegated to a subagent per the table above, with the result reviewed against
+3a's gate before 3b begins.
 
 ## Background
 
