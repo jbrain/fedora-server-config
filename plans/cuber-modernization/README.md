@@ -48,9 +48,9 @@ process.
 | # | Sub-phase | Deliverable | Gate to pass before moving on | Status |
 |---|---|---|---|---|
 | 3a | Scaffold + test harness | Standalone `index.html`/CSS under `JS/cuber/` with zero WordPress dependency, a container div, and a visible (even if just a static placeholder cube) page for local browser testing | Opens directly in a browser with no server, no console errors | **PASSED (2026-08-13)** — built by subagent, independently verified: screenshot shows correctly proportioned/colored static cube, a fresh Playwright console capture shows exactly one log line and zero errors/warnings |
-| 3b | State/model layer | ES module(s): cube state, cubelet addressing, slice/group logic, twist command parsing, direction relationships — conceptually mirrors `ERNO.Cube`/`Cubelet`/`Slice`/`Direction`/`Twist`/`Queue` but real `class` syntax, no prototype monkey-patching, no bundled math library | A plain-console/unit-test check reproduces upstream's own documented equalities (`FRONT.getOpposite() === BACK`, `FRONT.getClockwise() === RIGHT`, etc. from the README) with zero mutation of built-in prototypes | **PASSED (2026-08-13).** `src/color.js`, `src/direction.js`, `src/twist.js`, `src/cubelet.js`, `src/rotation.js`, `src/solved-color-map.js`, `src/cube.js`. All 16 required README equalities pass; `src/cube.test.mjs` (permanent regression test, run with plain `node`) independently validates the remapping logic against the original engine's actual live output for all 9 real twist commands (R/L/M/U/D/E/F/S/B) — full 27-cubelet exact match for R/U/F, targeted spot-checks for the rest, plus round-trip/inverse/shuffle sanity checks — 18/18 pass. See "Ground-truth findings" below for what this uncovered. Whole-cube X/Y/Z keyboard pseudo-rotation was deliberately NOT ported — it's not on the feature-parity checklist and was only ever an accidental side effect of the old document-level keyboard-listener bug (see Segment 1 findings), not a real product requirement. |
+| 3b | State/model layer | ES module(s): cube state, cubelet addressing, slice/group logic, twist command parsing, direction relationships — conceptually mirrors `ERNO.Cube`/`Cubelet`/`Slice`/`Direction`/`Twist`/`Queue` but real `class` syntax, no prototype monkey-patching, no bundled math library | A plain-console/unit-test check reproduces upstream's own documented equalities (`FRONT.getOpposite() === BACK`, `FRONT.getClockwise() === RIGHT`, etc. from the README) with zero mutation of built-in prototypes | **PASSED (2026-08-13), corrected during 3d prep.** `src/color.js`, `src/direction.js`, `src/twist.js`, `src/cubelet.js`, `src/rotation.js`, `src/solved-color-map.js`, `src/cube.js`. All 16 required README equalities pass; `src/cube.test.mjs` (permanent regression test, run with plain `node`) validates the remapping logic against the original engine's actual live output for all 9 face/slice commands AND the 3 whole-cube commands (R/L/M/U/D/E/F/S/B/X/Y/Z) — full 27-cubelet exact match for R/U/F, targeted spot-checks for the rest, plus round-trip/inverse/shuffle sanity checks — 23/23 pass. See "Ground-truth findings" below. **Correction:** this row originally said whole-cube X/Y/Z rotation was dead keyboard-only code and was skipped — that was WRONG, caught while researching 3d: `ERNO.Locked` (production's actual drag control) commits real X/Y/Z twists when dragging outside the cube, so this is core production behavior, not a debug feature. Added back in, ground-truthed, and verified (see below). Also fixed `shuffle()`'s default move set to match production's actual `PRESERVE_LOGO` set (`R/L/U/D/S/B` only — deliberately excludes `F`/`M`/`E` because they'd rotate or move the front-center logo-sticker cubelet), which the original 3b pass had missed. |
 | 3c | Render layer | CSS custom-property-driven transforms for all 27 cubelets, replacing `ERNO.renderers.CSS3D` | Static (non-interactive) cube renders correctly in the harness at the right size/perspective, matching a production screenshot side-by-side | **PASSED (2026-08-13)** — `src/render.js` builds 27 `.cubelet` divs (130px + 2px gap) from the live `Cube` state, reusing 3a's proven `.face--front/back/right/left/up/down` transform rules via inline-style overrides (no duplicate/competing CSS). First pass rendered flat-colored faces; a live side-by-side against `https://jackson-brain.com/about/` showed production actually insets each colored sticker inside a dark plastic face with a visible border — refined `render.js`/`style.css` to add a `.sticker` element (6% inset, `border-radius:10%`) per face instead of coloring the face directly. Re-verified after the fix: screenshot now closely matches production's real look (rounded, bordered stickers, not flat-colored faces), correct palette, correct tilt/perspective, zero console errors. |
-| 3d | Interaction layer | Drag-to-twist a face + fixed hero-angle whole-cube orbit (matching `ERNO.Interaction` + `ERNO.Locked`'s behavior) | Manual test pass on desktop (mouse) and a real mobile device/touch emulation — must feel at least as good as production, not just "technically works" | Not started |
+| 3d | Interaction layer | Drag-to-twist a face + fixed hero-angle whole-cube orbit (matching `ERNO.Interaction` + `ERNO.Locked`'s behavior) | Manual test pass on desktop (mouse) and a real mobile device/touch emulation — must feel at least as good as production, not just "technically works" | **IN PROGRESS.** Full `ERNO.Locked` source recovered and read in full (not just the partial read from Segment 1) — see "Ground-truth findings" below for what it actually does (it's not a soft camera orbit — it commits real, 90°-snapped X/Y/Z twists). Implementation not yet started. |
 | 3e | Animation | WAAPI-driven twist tweening + shuffle-on-load + idle autorotate | Twist timing/easing feels equivalent to the `TWEEN.Easing.Quartic.Out` original side-by-side | Not started |
 | 3f | Accessibility/perf | `prefers-reduced-motion` handling, `IntersectionObserver` pause-when-offscreen | Confirmed both behaviors trigger correctly (devtools media-feature override + scroll test) | Not started |
 | 3g | Theme integration | Rewrite `functions.php`'s enqueue chain, mount into `#the-cube` directly (not `#container`), remove the old vendor files | Full feature-parity checklist (below) passes on the live About page; old files kept as instant rollback per the master roadmap's Segment 5 | Not started |
@@ -71,6 +71,39 @@ principles got the wrong answer for several commands. Confirmed by direct measur
   non-obvious pattern that would have been very easy to get wrong by assuming symmetry with `M`.
 - All of this is encoded in `src/cube.js`'s `COMMANDS` table with an explicit comment warning
   against "simplifying" it from assumed symmetry without re-measuring.
+
+### Ground-truth findings for 3d — `ERNO.Locked` is not what Segment 1 assumed
+
+Segment 1's read of `ERNO.Locked` was incomplete (the fetch got cut off mid-function) and led to
+a wrong conclusion, corrected here before it caused a real implementation mistake:
+
+- **It is not a soft camera-only orbit.** Dragging on empty space (outside the cube) tracks the
+  drag distance/direction every frame, picks exactly one of the whole-cube `X`/`Y`/`Z` pseudo-
+  slices to rotate (snapping to whichever cardinal axis best matches the drag direction — using
+  a `getFace()` helper to disambiguate the ambiguous horizontal case between `X` and `Z`), and
+  live-updates that slice's `rotation` for visual feedback while dragging. On release, it snaps
+  to the nearest 90° multiple (or, if the gesture was fast enough to count as a swipe, commits
+  exactly one 90° turn in the swipe direction) and calls `cube.twist(new ERNO.Twist(command,
+  angle))` — a real, permanent, tween-animated state change, using the exact same twist/queue
+  machinery as a face turn. This directly contradicts this project's own earlier (wrong)
+  conclusion that whole-cube X/Y/Z rotation was unused/dead code — it is exactly what powers
+  production's actual background-drag interaction. **Fixed in `src/cube.js`**: `X`/`Y`/`Z`
+  commands added to the `COMMANDS` table, ground-truthed the same way as the face commands
+  (`X` matches `R`'s sign, `Y` matches `U`'s, `Z` matches `F`'s — all confirmed by exact-match
+  live comparison against cubelet 0's actual post-twist state, not assumed from the face-command
+  pattern).
+- **Dragging directly on the cube twists a face instead** (handled by the separate, always-on
+  `ERNO.Interaction` class) — `ERNO.Locked` only activates when the initial press misses the
+  cube's bounding box entirely (`projector.getIntersection(...) === null`), so the two
+  interactions are mutually exclusive based on where the gesture starts, not a mode toggle.
+- Also caught while reading the full source: production's actual default `cube.shuffle(5)` call
+  uses `this.shuffleMethod = this.PRESERVE_LOGO = 'RrLlUuDdSsBb'` — deliberately excluding `F`,
+  `M`, and `E` because all three would rotate or relocate the front-center logo-sticker cubelet.
+  **Fixed in `src/cube.js`**: `shuffle()`'s default move set now matches this exactly, verified
+  with a new regression-test assertion that the logo cubelet never leaves address 4 after
+  repeated shuffles.
+- `src/cube.test.mjs` updated accordingly: now 23/23 passing, including ground-truthed spot
+  checks for `X`/`Y`/`Z` and the logo-preservation shuffle assertion.
 
 ### Feature-parity checklist (checked at every gate, not just the end)
 

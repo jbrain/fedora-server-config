@@ -66,6 +66,22 @@ for (const [command, id, expected] of SPOT_CHECKS) {
   check(`twist('${command}') cubelet ${id}`, JSON.stringify(snap[id]) === JSON.stringify(expected));
 }
 
+// --- Whole-cube X/Y/Z (confirmed core to production's drag-to-orbit interaction, not
+// dead code - see plans/cuber-modernization/README.md) ---
+const WHOLE_CUBE_SPOT_CHECKS = [
+  ['X', 0, { address: 18, faces: ['NA', 'white', 'NA', 'NA', 'green', 'orange'] }],
+  ['X', 2, { address: 20, faces: ['NA', 'white', 'blue', 'NA', 'NA', 'orange'] }],
+  ['Y', 0, { address: 18, faces: ['NA', 'orange', 'NA', 'NA', 'white', 'green'] }],
+  ['Z', 0, { address: 2, faces: ['white', 'green', 'orange', 'NA', 'NA', 'NA'] }],
+];
+
+for (const [command, id, expected] of WHOLE_CUBE_SPOT_CHECKS) {
+  const cube = new Cube();
+  cube.twist(command);
+  const snap = snapshotById(cube);
+  check(`twist('${command}') cubelet ${id}`, JSON.stringify(snap[id]) === JSON.stringify(expected));
+}
+
 // --- Round-trip / inverse behavior ---
 {
   const cube = new Cube();
@@ -83,6 +99,13 @@ for (const [command, id, expected] of SPOT_CHECKS) {
   const cube = new Cube();
   cube.twist('R');
   check('single twist unsolves the cube', cube.isSolved() === false);
+}
+{
+  const cube = new Cube();
+  const logoCubeletId = cube.cubelets.find((c) => c.x === 0 && c.y === 0 && c.z === 1).id;
+  cube.shuffle(30);
+  const stillLogoPosition = cube.byAddress.findIndex((c) => c && c.id === logoCubeletId) === 4;
+  check('shuffle() default set never moves the front-center logo cubelet (matches PRESERVE_LOGO)', stillLogoPosition);
 }
 {
   const cube = new Cube();

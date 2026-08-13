@@ -13,10 +13,11 @@ import { rotateSteps } from './rotation.js';
 // behavior (see plans/cuber-modernization/README.md), because real Rubik's-cube
 // notation is not fully symmetric: R/U/F share one sign, L/D/B are the opposite,
 // and the three middle slices don't follow a single consistent rule either - M
-// matches L (opposite of R), while E and S both match U/F (not D/B). Do not
-// "simplify" this table from assumed symmetry without re-verifying against the
-// original engine; that's exactly the kind of subtle bug this project is
-// designed to avoid.
+// matches L (opposite of R), while E and S both match U/F (not D/B). The three
+// whole-cube commands (X/Y/Z) each match their same-letter-family face (R/U/F
+// respectively). Do not "simplify" this table from assumed symmetry without
+// re-verifying against the original engine; that's exactly the kind of subtle
+// bug this project is designed to avoid.
 const COMMANDS = {
   R: { axis: 'x', sign: 1, filter: (c) => c.x === 1 },
   L: { axis: 'x', sign: -1, filter: (c) => c.x === -1 },
@@ -27,9 +28,22 @@ const COMMANDS = {
   F: { axis: 'z', sign: 1, filter: (c) => c.z === 1 },
   B: { axis: 'z', sign: -1, filter: (c) => c.z === -1 },
   S: { axis: 'z', sign: 1, filter: (c) => c.z === 0 },
+  // Whole-cube rotations (all 27 cubelets) - these are NOT a dead keyboard-only
+  // debug feature (an earlier pass in this project wrongly assumed that and
+  // skipped them - see plans/cuber-modernization/README.md). Production's actual
+  // drag-to-orbit interaction (ERNO.Locked) commits these as real twists when
+  // dragging outside the cube. Ground-truthed: X matches R's sign, Y matches U's,
+  // Z matches F's (all +1) - confirmed by exact-match live comparison, not assumed.
+  X: { axis: 'x', sign: 1, filter: () => true },
+  Y: { axis: 'y', sign: 1, filter: () => true },
+  Z: { axis: 'z', sign: 1, filter: () => true },
 };
 
-const SHUFFLE_COMMANDS = Object.keys(COMMANDS);
+// Production's actual default shuffle move set (ERNO.Cube's PRESERVE_LOGO) -
+// deliberately excludes F/M/E because they'd rotate or move the front-center
+// logo-sticker cubelet. Ground-truthed from the original engine's own source
+// (this.shuffleMethod = this.PRESERVE_LOGO = 'RrLlUuDdSsBb'), not guessed.
+const SHUFFLE_COMMANDS = ['R', 'L', 'U', 'D', 'S', 'B'];
 
 export class Cube {
   constructor() {
