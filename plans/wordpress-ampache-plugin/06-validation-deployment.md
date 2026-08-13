@@ -121,10 +121,12 @@ before/after restoration evidence. Do not call irreversible play-history methods
    in use on this site (confirmed via the active-plugin list).
 - [x] The cache operations matrix names every active cache/CDN layer — **not applicable**, see
    above; the matrix itself was not produced since there is nothing to name.
-- [x] When now-playing is enabled, the host timer invokes WP-Cron every 60 seconds and measured lag
-   stays within two intervals — WP-Cron on this site is traffic-driven (now-playing refresh
-   interval is longer than typical page-request gaps in practice); no dedicated systemd timer was
-   added, revisit if now-playing freshness ever becomes unacceptably laggy.
+- [ ] When now-playing is enabled, the host timer invokes WP-Cron every 60 seconds and measured lag
+   stays within two intervals. The earlier production note here was too optimistic: a live follow-up
+   on 2026-08-11 found traffic-driven WP-Cron firing only on sporadic page traffic, which left the
+   Ampache plugin's "current" data stale even though the site itself was healthy. This repo now
+   ships `wordpress-wp-cron.service` + `wordpress-wp-cron.timer`; deploy and re-verify before
+   marking this complete again.
 - [x] Public/editor markup contains no remote Ampache artwork URL, and a local artwork cache miss
    never initiates an outbound request during rendering.
 - [x] Existing Contact Form 7, Flamingo, Google Sitemap Generator, wp-fail2ban, and `jackbrain`

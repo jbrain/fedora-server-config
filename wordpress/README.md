@@ -110,6 +110,24 @@ container going live, re-sync: re-dump `wordpress` from the system MariaDB and r
   (`post_max_size=64M`, `memory_limit=256M` — WordPress's own documented recommended value).
   nginx's `client_max_body_size` is matched to this.
 
+## WP-Cron timer for now-playing freshness
+
+This repo now ships a dedicated host-side `wordpress-wp-cron.service` +
+`wordpress-wp-cron.timer`, installed by `setup.sh`, to invoke WordPress cron every 60 seconds.
+That is not an optional optimization for the Jackson Brain Ampache plugin when the now-playing
+view is enabled; it is the production mechanism that keeps the plugin's background snapshot near
+real time.
+
+The timer deliberately hits the public hostname through local nginx, but forces it to `127.0.0.1`
+with `curl --resolve jackson-brain.com:443:127.0.0.1 ...`. That keeps the request path identical
+to the real site URL (correct host, HTTPS, and reverse-proxy headers) without depending on WAN
+hairpin NAT or external DNS from the host itself.
+
+Without this timer, WordPress falls back to traffic-driven WP-Cron, which is only best-effort.
+That proved insufficient in production on 2026-08-11: `wp-cron.php` was firing only on sporadic
+page traffic, with multi-minute gaps, and the Ampache plugin's "current" now-playing/recent data
+lagged visibly even though both containers and the public site were otherwise healthy.
+
 ## wp-fail2ban — fixed (2026-08-04)
 
 The **wp-fail2ban** plugin is active; the `[wordpress]` fail2ban jail (host-side,
@@ -137,7 +155,9 @@ Active on the `music` page (blocks: Library Statistics, Now Playing, Recently Pl
 2. `JBA_AMPACHE_ORIGIN` is already pinned to `https://music.jackson-brain.com` in
    `WORDPRESS_CONFIG_EXTRA` above — not a secret, but intentionally read-only in wp-admin.
 3. Recreate the container (`sudo systemctl restart wordpress`) so it picks up the new bind mount.
-4. Activate the plugin, then use "Test connection" and "Refresh now" on its Settings page
+4. Confirm `systemctl status wordpress-wp-cron.timer` shows the timer active; now-playing
+  freshness depends on it.
+5. Activate the plugin, then use "Test connection" and "Refresh now" on its Settings page
    (**Settings → Ampache Integration**, also linked directly from the plugin's row on the
    Plugins list page).
 
@@ -247,6 +267,14 @@ fallback path anymore, only container rollback.
 - **`wp-admin` bounces to `wp-login.php?...&reauth=1`**: expected after a container restart —
   `wp-config.php`'s `AUTH_KEY`/`SECRET_KEY`/etc. salts regenerate fresh every recreate (the file
   isn't persisted), invalidating any existing login cookie. Just log in again; not a compromise.
+- **Ampache blocks render but the data is visibly old**: first check `systemctl status
+  wordpress-wp-cron.timer` on the host. The plugin's now-playing path is background-only by
+  design; healthy public rendering does not imply the snapshot is being refreshed often enough.
+  The 2026-08-11 live failure mode was exactly this: `wp-cron.php` still worked, but only when
+  page traffic happened to trigger it, leaving multi-minute gaps and stale "current" music data.
+  Also ensure the timer calls plain `/wp-cron.php` (no `doing_wp_cron=<manual-key>` query param);
+  forcing an arbitrary cron key can return HTTP 200 yet still skip due jobs if the key does not
+  match WordPress's own cron-lock flow.
 - **Mixed content / `http://` asset URLs**: confirm `WORDPRESS_CONFIG_EXTRA` actually landed in
   the container's `wp-config.php` (`podman exec wordpress cat /var/www/html/wp-config.php`).
 - **Upload fails silently past a certain size**: check both the PHP limits (`uploads.ini`) and

@@ -1,0 +1,8 @@
+[Unit]
+Description=Trigger WordPress WP-Cron for jackson-brain.com
+After=network-online.target nginx.service wordpress.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '/usr/bin/curl --fail --silent --show-error --max-time 45 --resolve jackson-brain.com:443:127.0.0.1 "https://jackson-brain.com/wp-cron.php" >/dev/null'

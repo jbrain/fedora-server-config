@@ -48,13 +48,18 @@ fi
 # 5. systemd unit
 echo "Installing wordpress.service..."
 cp "${SRC_DIR}/wordpress.service" /etc/systemd/system/wordpress.service
+echo "Installing wordpress-wp-cron service/timer..."
+cp "${SRC_DIR}/wordpress-wp-cron.service" /etc/systemd/system/wordpress-wp-cron.service
+cp "${SRC_DIR}/wordpress-wp-cron.timer" /etc/systemd/system/wordpress-wp-cron.timer
 systemctl daemon-reload
 systemctl enable wordpress.service
+systemctl enable --now wordpress-wp-cron.timer
 
 echo ""
 echo "Done. Next steps:"
 echo "  1. Confirm ${WP_DIR}/.env is filled in."
 echo "  2. Start: systemctl start wordpress"
-echo "  3. Wait for healthcheck: podman ps --filter name=wordpress"
-echo "  4. Smoke-test directly: curl -I http://127.0.0.1:8082/"
-echo "  5. Follow wordpress/README.md to repoint the Apache vhost."
+echo "  3. Confirm timer: systemctl status wordpress-wp-cron.timer"
+echo "  4. Wait for healthcheck: podman ps --filter name=wordpress"
+echo "  5. Smoke-test directly: curl -I http://127.0.0.1:8082/"
+echo "  6. Follow wordpress/README.md to repoint the Apache vhost."
