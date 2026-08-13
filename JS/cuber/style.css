@@ -29,7 +29,9 @@ body {
 	perspective: 800px;
 }
 
-/* Static placeholder cube proving the CSS 3D transform approach — not the real 27-cubelet cube. */
+/* Static placeholder cube proving the CSS 3D transform approach — not the real 27-cubelet
+   cube. Kept as-is (unused by index.html now that render.js builds the real cube into
+   #the-cube) as the reference technique .face--front/back/right/left/up/down below reuse. */
 .cube {
 	position: relative;
 	width: var(--cube-size);
@@ -39,10 +41,41 @@ body {
 	transform: rotateX(-30deg) rotateY(-45deg);
 }
 
+/* Real 27-cubelet cube (render.js). Same resting tilt as .cube, applied to the whole
+   group rather than individual cubelets. Cubelets reuse the .face--* rules above via
+   render.js's inline style overrides (background/transform/size), so there's only one
+   set of per-face transform rules, not two competing ones. */
+.cube-group {
+	position: relative;
+	width: 394px;
+	height: 394px;
+	margin: calc((440px - 394px) / 2) auto;
+	transform-style: preserve-3d;
+	transform: rotateX(-30deg) rotateY(-45deg);
+}
+
+.cubelet {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 130px;
+	height: 130px;
+	margin: -65px 0 0 -65px;
+	transform-style: preserve-3d;
+}
+
 .face {
 	position: absolute;
 	width: var(--cube-size);
 	height: var(--cube-size);
+}
+
+/* Inset colored square within a face, leaving a visible dark "plastic" border - matches
+   production's real look (each sticker is inset from its face, not a flat-colored face). */
+.sticker {
+	position: absolute;
+	inset: 6%;
+	border-radius: 10%;
 }
 
 .face--front {
