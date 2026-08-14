@@ -338,6 +338,7 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
         ? resolved.command.toUpperCase()
         : resolved.command.toLowerCase();
 
+      const wasSolved = cube.isSolved();
       const result = cube.twist(command, Math.abs(quarterTurns) * 90);
       await animateSettle({
         containerElement,
@@ -347,6 +348,15 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
         toDegrees: cssSweepDegrees(result.axis, result.modelDegrees),
       });
       onCommitted();
+
+      // Fires once, exactly on the transition into a solved state - not on every
+      // commit while already solved (e.g. a twist immediately undone) - so a future
+      // celebration/notification hooks into a real "the user just solved it" moment,
+      // not a noisy repeat. No listener attached here by design; this is the event
+      // itself, left for whatever UI wants to react to it later.
+      if (!wasSolved && cube.isSolved()) {
+        containerElement.dispatchEvent(new CustomEvent('cubesolved', { bubbles: true }));
+      }
     }
 
     isSettling = false;

@@ -553,6 +553,21 @@ Pathway A (see "Segment 2 decisions" above).
 | **Accessibility** | No `prefers-reduced-motion` support, no visibility-based deferral | `prefers-reduced-motion` collapses animations to instant; shuffle-on-load deferred via `IntersectionObserver` until actually scrolled into view |
 | **Debuggability** | Minified/Closure-compiled bundle - real source not available in devtools without external source maps (none shipped) | Plain, unminified ES module source is exactly what ships and what devtools shows - no source maps needed |
 
+### Solved-state event (owner request, 2026-08-13)
+
+Owner asked whether a scrambled cube is always solvable - yes, structurally guaranteed: the
+shuffle (and every user twist) only ever applies legal moves from the solved state, so any
+reachable state is by construction solvable back to identity via the inverse move sequence (a
+basic Rubik's-cube group-theory fact, not something requiring a runtime check). What the owner
+actually wanted: a hook to build on later, not a solver. Added a `cubesolved` `CustomEvent`,
+dispatched on `#the-cube` exactly once on the transition into a solved state after a user's
+committed twist (not on every commit while already solved, e.g. a twist immediately undone -
+tracked via an `isSolved()` snapshot taken immediately before the twist). `main.js` wires up a
+placeholder `console.log('Cube solved!')` listener as a starting point for a future celebration/
+notification UI. Verified via simulated drag+reverse: `cubesolved` fires exactly once, only on
+the actual return to solved, not before. `cube.test.mjs` re-run, 25/25 still passing (state
+model untouched). Redeployed live, zero console errors.
+
 ## Deeper full-source code review (2026-08-13) — additional findings beyond Segment 1
 
 Fetched the actual readable (non-minified) upstream `cuber.js` source

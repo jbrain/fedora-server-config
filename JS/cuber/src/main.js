@@ -17,6 +17,10 @@ const interaction = attachInteraction({
   onCommitted: () => renderCube(cube, containerElement),
 });
 
+// Placeholder for future extension (celebration animation, message, etc.) - fires
+// once, exactly when a user's twist results in a solved cube (see interaction.js).
+containerElement.addEventListener('cubesolved', () => console.log('Cube solved!'));
+
 // Shuffle-on-load, matching production's own `cube.shuffle(5)` on the About page -
 // animated one twist at a time rather than instantly, using the same settle
 // animation as a real drag commit (see plans/cuber-modernization/README.md's
