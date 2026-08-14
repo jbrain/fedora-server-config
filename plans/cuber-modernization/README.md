@@ -1,12 +1,14 @@
 # Cuber (Rubik's Cube) Animation Modernization
 
-> **Status: Segment 3 (3a-3g) complete, deployed live, and confirmed working on both desktop
-> and mobile (2026-08-13).** The new engine is live on `https://jackson-brain.com/about/`.
-> Four rounds of post-deployment fixes from real owner testing are documented below (size,
-> the hero-angle tilt, the core axis-perpendicularity bug, and mobile touch support) - all
-> confirmed resolved by the owner on real hardware, not just automated checks. Old vendor
-> files kept as `*.dead-20260813` for instant rollback. Remaining open item: Segment 5
-> (soak period + old-file cleanup).
+> **Status: PROJECT COMPLETE (2026-08-13).** All 5 segments done. The new zero-dependency
+> engine is live on `https://jackson-brain.com/about/`, confirmed working on real desktop mouse
+> and a real phone (touch) after four rounds of post-deployment fixes (documented below: size,
+> the hero-angle tilt, the core axis-perpendicularity bug, and mobile touch support). Segment 5
+> cleanup is done - all old vendor files (`cuber.min.js`, `initCube.min.js`, `cube.js`,
+> `require.js`, `main.js`) permanently deleted from the live server; the original vendored
+> source stays checked into this repo (`JS/cuber/cuber.js`, `JS/cuber/init_cuber.js`) as
+> historical reference. See the "Final comparison" section below for the technology/size/
+> resource comparison between the old and new implementations.
 
 ## Segment 2 decisions (owner, 2026-08-13)
 
@@ -522,7 +524,34 @@ Pathway A (see "Segment 2 decisions" above).
   path, the unused `deviceMotion` helper, the old vendor bundle).
 - **Segment 5 — Staging verification + rollback.** Live-verify on `/about/`, keep the current
   `cuber.min.js`/`initCube.min.js`/`cube.js` as an instant server-side revert path during a soak
-  period, then clean up.
+  period, then clean up. **DONE (2026-08-13).** The soak period was the four rounds of live
+  owner testing/fixes documented above, ending in explicit confirmation on both real desktop
+  mouse and a real phone. All six `*.dead-20260813` old vendor files (`cube.js`, `cuber.min.js`,
+  `initCube.js`, `initCube.min.js`, `main.js`, `require.js`) permanently deleted from
+  `wp-content/themes/jackbrain/js/` on the live server. Verified after deletion: About page
+  still returns `200`, zero console errors, `window.cube` has 27 cubelets, `isSolved()` reads
+  correctly - confirms the new engine has zero runtime dependency on the deleted files (it only
+  ever loaded from its own `js/cuber/` subdirectory). The original vendored source
+  (`JS/cuber/cuber.js`, `JS/cuber/init_cuber.js`) stays checked into this repo as historical
+  reference/rollback source, matching this repo's established convention for other decommissioned
+  components (e.g. `apache/`, `airsonic/`).
+
+### Final comparison: old vendor bundle vs. new engine (2026-08-13)
+
+| | Old (removed) | New (live) |
+|---|---|---|
+| **Core dependencies** | Three.js r66 (2014) + TWEEN.js r12 (2012) + RequireJS (AMD loader), Closure-Compiler-built into one minified bundle (no build config in this repo - a black box) | Zero dependencies - plain native ES modules (`import`/`export`), no build step, real source is what ships |
+| **Live-loaded JS (actual browser transfer)** | `require.js` + `cube.js` + `cuber.min.js` + `initCube.min.js` = **150,542 bytes (~147 KB)**, all minified | 11 plain `.js` files = **44,967 bytes (~44 KB)** unminified/uncompiled |
+| **CSS** | Embedded in the theme's global `style.css` (~215 lines of cube-specific rules, since removed) | Dedicated `js/cuber/style.css`, **4,844 bytes** |
+| **Total cube-specific footprint** | ~147 KB JS + embedded CSS | ~48.6 KB JS+CSS combined - **roughly a 67% reduction**, despite having zero minification at all |
+| **DOM nodes per cubelet face** | 6 (`.face` + `.wireframe` + `.id`+`.underline` + `.text` + `.sticker`, most `display:none` debug-only elements) | 2 (`.face` + `.sticker`) - about **1/3 the element count**, ~972 -> ~324 elements across all 27 cubelets |
+| **3D math** | Full `THREE.Object3D`/`Quaternion`/`Matrix4`/`Euler` machinery for every cubelet, every frame | Plain integer `{x,y,z}` coordinate arithmetic - no matrix/vector/quaternion library needed at all, since every twist is an exact 90°-multiple rotation around a cardinal axis |
+| **Rendering** | Custom `CSS3DRenderer` re-serializes a full `matrix3d(...)` string from a THREE matrix for every object, every frame, inside a `requestAnimationFrame` loop that **runs forever, even fully at rest** | Plain `transform: translate3d()/rotateX/Y/Z()` strings written directly, no serialization step - **zero continuous per-frame JS work**; only runs during an actual twist/settle |
+| **Animation** | `TWEEN.js` mutates plain JS numbers every animation frame; the render loop above must independently notice the change and re-render | Native Web Animations API (`element.animate()`) - GPU-composited, scheduled entirely by the browser, not JS; supports `prefers-reduced-motion` natively via `duration:0` |
+| **Global scope hygiene** | Monkey-patches `Number.prototype`/`String.prototype`/`Array.prototype` with dozens of custom methods; unscoped `document`-level keyboard listener twists the cube from a keypress anywhere on the page | Zero prototype modification; all listeners scoped to the cube's own container element (plus `window` only for the duration of an active drag); no keyboard control (out of scope per Segment 2) |
+| **Known bugs inherent to the old architecture** | Real camera-aspect-ratio bug (computed once from `window.innerWidth/innerHeight` at construction, never the real container box, never recalculated on resize) | No camera/aspect-ratio concept exists at all in a flat-CSS-perspective architecture - this entire bug class is structurally impossible now |
+| **Accessibility** | No `prefers-reduced-motion` support, no visibility-based deferral | `prefers-reduced-motion` collapses animations to instant; shuffle-on-load deferred via `IntersectionObserver` until actually scrolled into view |
+| **Debuggability** | Minified/Closure-compiled bundle - real source not available in devtools without external source maps (none shipped) | Plain, unminified ES module source is exactly what ships and what devtools shows - no source maps needed |
 
 ## Deeper full-source code review (2026-08-13) — additional findings beyond Segment 1
 
