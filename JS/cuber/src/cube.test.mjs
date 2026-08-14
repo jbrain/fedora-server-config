@@ -109,6 +109,20 @@ for (const [command, id, expected] of WHOLE_CUBE_SPOT_CHECKS) {
 }
 {
   const cube = new Cube();
+  const logoCubelets = cube.cubelets.filter((c) => c.isLogo);
+  const onlyOne = logoCubelets.length === 1;
+  const isFrontCenter = onlyOne && logoCubelets[0].x === 0 && logoCubelets[0].y === 0 && logoCubelets[0].z === 1;
+  check('exactly one cubelet is flagged isLogo, and it is the front-center cubelet', onlyOne && isFrontCenter);
+}
+{
+  const cube = new Cube();
+  const logoId = cube.cubelets.find((c) => c.isLogo).id;
+  cube.twist('Y'); // whole-cube rotation moves the logo cubelet off front-center
+  const logoCubelet = cube.cubelets.find((c) => c.id === logoId);
+  check('isLogo flag stays with the physical cubelet after a whole-cube twist, not tied to a fixed address', logoCubelet.isLogo === true);
+}
+{
+  const cube = new Cube();
   cube.shuffle(15);
   check('shuffle(15) leaves exactly 27 cubelets, all addresses unique 0-26', (() => {
     const addresses = cube.cubelets.map((c) => c.address).sort((a, b) => a - b);

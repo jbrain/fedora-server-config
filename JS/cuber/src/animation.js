@@ -8,6 +8,15 @@ export const TWIST_EASING = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
 const ROTATE_FN = { x: 'rotateX', y: 'rotateY', z: 'rotateZ' };
 
+// Checked live (not cached at module-load) since a user can toggle this OS setting while
+// the page is open. There's no continuous idle animation to gate here (verified against
+// the live production cube directly - it has no autorotate at all, see the plan doc's 3e
+// correction) - this only affects the twist-settle sweep itself, which still moves large
+// visual elements over 400ms and is worth skipping for motion-sensitive users.
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 // Ground-truthed against the browser's own DOMMatrix (see plans/cuber-modernization/README.md):
 // CSS rotateX/rotateZ share the state model's rotation sign convention directly, but
 // rotateY is inverted relative to it. Do not "simplify" this to a single sign without
@@ -28,6 +37,7 @@ export function cssSweepDegrees(axis, modelDegrees) {
 // Resolves once every cubelet has finished settling; does NOT touch the state model.
 export function animateSettle({ containerElement, axis, cubelets, fromDegrees, toDegrees }) {
   const rotateFn = ROTATE_FN[axis];
+  const duration = prefersReducedMotion() ? 0 : TWIST_DURATION_MS;
 
   const animations = cubelets.map(({ id, x, y, z }) => {
     const el = containerElement.querySelector(`[data-cubelet-id="${id}"]`);
@@ -37,7 +47,7 @@ export function animateSettle({ containerElement, axis, cubelets, fromDegrees, t
         { transform: `${rotateFn}(${fromDegrees}deg) ${base}` },
         { transform: `${rotateFn}(${toDegrees}deg) ${base}` },
       ],
-      { duration: TWIST_DURATION_MS, easing: TWIST_EASING },
+      { duration, easing: TWIST_EASING },
     );
     // WAAPI's default fill ('none') means the animation's effect is removed the
     // instant it finishes, reverting the element to whatever inline style it had

@@ -4,10 +4,23 @@
 // half-size instead of the placeholder's hardcoded 100px, via inline style
 // (which overrides the placeholder rules' --cube-size-based values).
 
-export const CUBELET_SIZE = 130;
+import { COLORLESS } from './color.js';
+
+// Matches production's real default cubelet size - ERNO.Cube's `textureSize` option
+// defaults to 120 (not the 130 first guessed here), ground-truthed by reading the
+// actual constructor default in cuber.js (`a.textureSize = ... ? ... : 120`) rather
+// than eyeballing a screenshot, which wasn't precise enough to catch a ~10% oversize.
+// Sized down slightly further from that ground-truthed 120px per owner request -
+// style.css's #the-cube/.cube-group dimensions must stay in sync with this value.
+export const CUBELET_SIZE = 100;
 export const GAP = 2;
 export const SPACING = CUBELET_SIZE + GAP;
 const HALF = CUBELET_SIZE / 2;
+
+// Matches production's "purty" JB logo sticker (images/jbrown.png). Overridable
+// via window.CUBER_LOGO_URL so the WordPress theme integration can point at its
+// own already-existing theme asset URL without touching this module.
+const LOGO_URL = (typeof window !== 'undefined' && window.CUBER_LOGO_URL) || './images/jbrown.png';
 
 // Index order matches ALL_DIRECTIONS / cubelet.faces (front/up/right/down/left/back).
 const FACE_TRANSFORMS = [
@@ -75,7 +88,12 @@ export function renderCube(cube, containerElement) {
     cubelet.faces.forEach((face, i) => {
       const faceEl = cubeletEl.children[i];
       faceEl.style.background = '#111';
-      faceEl.firstElementChild.style.background = face.color.hex ?? 'transparent';
+      const sticker = faceEl.firstElementChild;
+      if (cubelet.isLogo && face.color !== COLORLESS) {
+        sticker.style.background = `${face.color.hex} url("${LOGO_URL}") center / cover no-repeat`;
+      } else {
+        sticker.style.background = face.color.hex ?? 'transparent';
+      }
     });
   });
 

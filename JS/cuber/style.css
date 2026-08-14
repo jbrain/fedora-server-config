@@ -21,12 +21,19 @@ body {
 	font-family: system-ui, sans-serif;
 }
 
-/* Production sizing/position for the cube's mount point, per the plan doc. */
+/* Production sizing/position for the cube's mount point, per the plan doc. Sized down
+   slightly and pushed further down the page (more top margin) per owner request, below
+   the ground-truthed 120px-cubelet size. */
 #the-cube {
-	width: 440px;
-	height: 440px;
-	margin: 40px auto;
+	width: 370px;
+	height: 370px;
+	margin: 90px auto 40px;
 	perspective: 800px;
+	/* Without this, a touch-drag on mobile is claimed by the browser's own native
+	   scroll/pan gesture recognizer before interaction.js's pointer listeners ever see
+	   a full gesture - mouse (no native scroll gesture to compete with) worked fine,
+	   but touch didn't, exactly matching how this was reported live. */
+	touch-action: none;
 }
 
 /* Static placeholder cube proving the CSS 3D transform approach — not the real 27-cubelet
@@ -36,9 +43,17 @@ body {
 	position: relative;
 	width: var(--cube-size);
 	height: var(--cube-size);
-	margin: calc((440px - var(--cube-size)) / 2) auto;
+	margin: calc((370px - var(--cube-size)) / 2) auto;
 	transform-style: preserve-3d;
-	transform: rotateX(-30deg) rotateY(-45deg);
+	/* Ground-truthed against the real production bootstrap (init_cuber.js):
+	   cube.object3D.lookAt(camera.position) then rotation += Euler(PI*0.1, PI*-0.25, 0),
+	   which resolves to exactly (18deg, -45deg, 0) in THREE's Y-up convention - CSS's
+	   Y-down convention flips the X sign. -30deg (the original placeholder guess, never
+	   re-verified) was a real, previously undetected bug: it showed a much more steeply
+	   downward-tilted view (a large, prominent UP face) than production's actual near-
+	   level angle (barely a sliver of UP visible) - confirmed by rendering the real
+	   engine at this exact angle and comparing screenshots side by side. */
+	transform: rotateX(-18deg) rotateY(-45deg);
 }
 
 /* Real 27-cubelet cube (render.js). Same resting tilt as .cube, applied to the whole
@@ -47,20 +62,20 @@ body {
    set of per-face transform rules, not two competing ones. */
 .cube-group {
 	position: relative;
-	width: 394px;
-	height: 394px;
-	margin: calc((440px - 394px) / 2) auto;
+	width: 304px;
+	height: 304px;
+	margin: calc((370px - 304px) / 2) auto;
 	transform-style: preserve-3d;
-	transform: rotateX(-30deg) rotateY(-45deg);
+	transform: rotateX(-18deg) rotateY(-45deg);
 }
 
 .cubelet {
 	position: absolute;
 	top: 50%;
 	left: 50%;
-	width: 130px;
-	height: 130px;
-	margin: -65px 0 0 -65px;
+	width: 100px;
+	height: 100px;
+	margin: -50px 0 0 -50px;
 	transform-style: preserve-3d;
 	/* Hints the browser to proactively promote each cubelet to its own GPU
 	   compositor layer, since its transform changes on every drag/settle frame -

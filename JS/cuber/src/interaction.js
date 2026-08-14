@@ -50,29 +50,141 @@ function projectAxisToScreen(groupElement, axis) {
   return { x: tip.x - origin.x, y: tip.y - origin.y };
 }
 
-// Of the candidate axes, picks whichever one's current screen-space projection is
-// most aligned with the actual drag vector - i.e. whichever rotation the user's
-// drag direction most plausibly intends, given the cube's current orientation.
-function pickBestAxis(candidateAxes, groupElement, dragX, dragY) {
-  let best = null;
-  let bestAbsScore = -Infinity;
+// Same idea as projectAxisToScreen but keeps all 3 output components - the group's own
+// CSS transform is a pure rotation (perspective is applied separately, to #the-cube
+// itself), so this gives an accurate 3D-rotated vector, not just its flattened screen
+// shadow. Needed for the real cross-product axis math below.
+function transformVector3D(groupElement, vec) {
+  const matrix = new DOMMatrixReadOnly(getComputedStyle(groupElement).transform);
+  const origin = matrix.transformPoint(new DOMPoint(0, 0, 0));
+  const tip = matrix.transformPoint(new DOMPoint(vec.x, -vec.y, vec.z));
+  return { x: tip.x - origin.x, y: tip.y - origin.y, z: tip.z - origin.z };
+}
 
-  for (const axisName of candidateAxes) {
-    const screen = projectAxisToScreen(groupElement, axisName);
-    const length = Math.hypot(screen.x, screen.y) || 1;
-    const score = (screen.x * dragX + screen.y * dragY) / length;
-    if (Math.abs(score) > bestAbsScore) {
-      bestAbsScore = Math.abs(score);
-      best = { axisName, screen, length, score };
-    }
+const AXIS_VECTORS = { x: { x: 1, y: 0, z: 0 }, y: { x: 0, y: 1, z: 0 }, z: { x: 0, y: 0, z: 1 } };
+
+// Absolute Direction-id-indexed face normals (front/up/right/down/left/back), matching
+// ALL_DIRECTIONS/direction.js's own convention (state-model coordinates, Y+ up).
+const FACE_NORMALS = [
+  { x: 0, y: 0, z: 1 }, // front
+  { x: 0, y: 1, z: 0 }, // up
+  { x: 1, y: 0, z: 0 }, // right
+  { x: 0, y: -1, z: 0 }, // down
+  { x: -1, y: 0, z: 0 }, // left
+  { x: 0, y: 0, z: -1 }, // back
+];
+
+function cross3D(a, b) {
+  return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+}
+function dot3D(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+// Resolves which candidate axis a drag actually twists. Ground-truthed against the
+// real ERNO.Interaction algorithm - and a real, reported bug fixed by this ground-
+// truthing: the resolved axis must be PERPENDICULAR to the drag direction, not
+// aligned with it (`axis = cross(faceNormal, dragDirectionOnPlane)` - a cross product
+// is by definition perpendicular to both its inputs). An earlier version of this
+// picked whichever candidate axis's OWN screen projection was most ALIGNED with the
+// drag vector - backwards, confirmed both by re-deriving the cross-product math (for
+// the front face, cross(normalZ, s*X+t*Y) = s*Y - t*X, i.e. the dominant component
+// SWAPS from X to Y) and by the live report: "dragging left/right on any cube in the
+// layer spins horizontally [Y-axis, U/E/D], dragging up/down rotates vertically
+// [X/Z-axis, L/M/R or B/S/F]" - which is exactly the perpendicular relationship, not
+// the aligned one this code previously computed.
+function pickAxis(candidateAxes, groupElement, dragX, dragY, directionId) {
+  const projected = candidateAxes.map((axisName) => ({ axisName, screen: projectAxisToScreen(groupElement, axisName) }));
+
+  if (directionId !== null) {
+    // FACE drag (exactly 2 candidates, which exactly span the clicked face's tangent
+    // plane): decompose the 2D screen drag into that plane's own basis (s, t), then
+    // reconstruct a true 3D drag-direction vector from the SAME basis using the 3D
+    // (not just screen-projected) axis vectors, cross it with the face's real 3D
+    // normal, and see which candidate axis that result actually matches.
+    const [a, b] = projected;
+    const det = a.screen.x * b.screen.y - b.screen.x * a.screen.y;
+    const s = (dragX * b.screen.y - b.screen.x * dragY) / det;
+    const t = (a.screen.x * dragY - dragX * a.screen.y) / det;
+
+    const aVec3D = transformVector3D(groupElement, AXIS_VECTORS[a.axisName]);
+    const bVec3D = transformVector3D(groupElement, AXIS_VECTORS[b.axisName]);
+    const direction3D = {
+      x: s * aVec3D.x + t * bVec3D.x,
+      y: s * aVec3D.y + t * bVec3D.y,
+      z: s * aVec3D.z + t * bVec3D.z,
+    };
+    const normal3D = transformVector3D(groupElement, FACE_NORMALS[directionId]);
+    const rotationAxis3D = cross3D(normal3D, direction3D);
+
+    const scoreA = dot3D(rotationAxis3D, aVec3D);
+    const scoreB = dot3D(rotationAxis3D, bVec3D);
+    return Math.abs(scoreA) >= Math.abs(scoreB)
+      ? { axisName: a.axisName, projected, directionId, alongAxis: scoreA }
+      : { axisName: b.axisName, projected, directionId, alongAxis: scoreB };
   }
 
+  // BACKGROUND (whole-cube) drag: the "clicked plane" is the viewport itself, facing
+  // the camera - so its normal is the fixed screen/view Z axis (0,0,1), untransformed
+  // by the group's own rotation. cross((0,0,1), (dx,dy,0)) = (-dy, dx, 0): a plain 90-
+  // degree rotation of the drag vector in screen space. Matches upstream's own
+  // background-drag logic (`ERNO.Locked`), which also rotates the drag vector 90
+  // degrees (`c.set(q.y*-1, q.x, 0)`) before matching it to the nearest cardinal axis.
+  const rotated = { x: -dragY, y: dragX };
+  let best = null;
+  let bestAbsScore = -Infinity;
+  for (const { axisName, screen } of projected) {
+    const length = Math.hypot(screen.x, screen.y) || 1;
+    const score = (screen.x * rotated.x + screen.y * rotated.y) / length;
+    if (Math.abs(score) > bestAbsScore) {
+      bestAbsScore = Math.abs(score);
+      best = { axisName, projected, directionId, alongAxis: score };
+    }
+  }
   return best;
+}
+
+// Recomputes "how far the drag has moved along the resolved axis" (in screen-pixel-
+// equivalent world units) for the CURRENT drag delta, using the same method pickAxis
+// used to choose the axis in the first place - kept as one function so axis selection
+// and the live preview/commit angle can never drift out of sync with each other.
+function alongResolvedAxis(resolved, dragX, dragY, groupElement) {
+  if (resolved.directionId !== null) {
+    const [a, b] = resolved.projected;
+    const det = a.screen.x * b.screen.y - b.screen.x * a.screen.y;
+    const s = (dragX * b.screen.y - b.screen.x * dragY) / det;
+    const t = (a.screen.x * dragY - dragX * a.screen.y) / det;
+
+    const aVec3D = transformVector3D(groupElement, AXIS_VECTORS[a.axisName]);
+    const bVec3D = transformVector3D(groupElement, AXIS_VECTORS[b.axisName]);
+    const direction3D = {
+      x: s * aVec3D.x + t * bVec3D.x,
+      y: s * aVec3D.y + t * bVec3D.y,
+      z: s * aVec3D.z + t * bVec3D.z,
+    };
+    const normal3D = transformVector3D(groupElement, FACE_NORMALS[resolved.directionId]);
+    const rotationAxis3D = cross3D(normal3D, direction3D);
+    const resolvedVec3D = resolved.axisName === a.axisName ? aVec3D : bVec3D;
+    return dot3D(rotationAxis3D, resolvedVec3D);
+  }
+
+  const rotated = { x: -dragY, y: dragX };
+  const { screen } = resolved.projected.find((p) => p.axisName === resolved.axisName);
+  const length = Math.hypot(screen.x, screen.y) || 1;
+  return (screen.x * rotated.x + screen.y * rotated.y) / length;
 }
 
 export function attachInteraction({ cube, containerElement, groupElement, onCommitted }) {
   let drag = null;
   let isSettling = false; // blocks starting a new gesture while a previous one's settle animation plays
+  // Blocks ALL gestures outright - matches upstream's own
+  // `mouseInteraction.enabled = mouseControlsEnabled && !finalShuffle`, which disables
+  // interaction entirely while a shuffle sequence is running. Missing this exact guard
+  // was a real bug: a user dragging during/around shuffle-on-load raced against it (both
+  // independently call cube.twist()/write DOM styles), which could resolve a gesture's
+  // command against a since-changed layer and leave the cube looking "corrupted" -
+  // reported live as "not all drags complete" / "easy to corrupt everything".
+  let enabled = true;
 
   function reset() {
     drag = null;
@@ -92,7 +204,7 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
     if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return null;
 
     const candidateAxes = drag.onFace ? FACE_AXES[drag.directionId] : ['x', 'y', 'z'];
-    const picked = pickBestAxis(candidateAxes, groupElement, dx, dy);
+    const picked = pickAxis(candidateAxes, groupElement, dx, dy, drag.onFace ? drag.directionId : null);
 
     let command;
     let affectedCubelets;
@@ -118,17 +230,12 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
   //
   // Returns degrees in the AXIS's own natural-sign convention (matching `rotateSteps`'s
   // `sign: 1` case for that axis) - NOT a specific command's sign, and NOT yet CSS
-  // degrees (see cssSweepDegrees). `resolved.screen` is the axis direction projected to
-  // screen space by a unit vector, so its own magnitude (`resolved.length`) is <= 1, not
-  // in pixels - it must be normalized to a true unit vector before dotting with the
-  // (pixel-scale) drag delta, then scaled by a fixed pixels-per-quarter-turn constant.
-  // An earlier version of this divided by `length * length` directly against pixel
-  // deltas, producing wildly wrong (10,000+ degree) results - caught by testing an
-  // actual simulated drag, not by inspection.
+  // degrees (see cssSweepDegrees). `alongResolvedAxis` gives "how far the drag has moved
+  // along the resolved axis" in screen-pixel-equivalent world units (via the same 2x2
+  // basis solve/dot-product used to pick the axis - see pickAxis above), which is then
+  // scaled by a fixed pixels-per-quarter-turn constant into degrees.
   function previewDegrees(resolved, dx, dy) {
-    const unitX = resolved.screen.x / resolved.length;
-    const unitY = resolved.screen.y / resolved.length;
-    const projectedPixels = unitX * dx + unitY * dy;
+    const projectedPixels = alongResolvedAxis(resolved, dx, dy, groupElement);
     return (projectedPixels / PIXELS_PER_QUARTER_TURN) * 90;
   }
 
@@ -148,7 +255,12 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
   }
 
   function onPointerDown(event) {
+    if (!enabled) return;
     if (event.button !== undefined && event.button !== 0) return;
+    // Matches upstream's own touchstart preventDefault - belt-and-suspenders alongside
+    // #the-cube's `touch-action: none` against the browser claiming this gesture for
+    // native scroll/pan/zoom before it's even resolved into a cube rotation.
+    event.preventDefault();
     if (isSettling) return; // don't let a new gesture fight an in-progress settle animation
 
     const faceEl = event.target.closest('.face');
@@ -169,6 +281,10 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
 
   function onPointerMove(event) {
     if (!drag) return;
+    // Defense-in-depth alongside #the-cube's `touch-action: none` (matching upstream's
+    // own `event.preventDefault()` in its touchmove handler) - stops a touch drag from
+    // also scrolling/panning the page underneath the gesture.
+    event.preventDefault();
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
     const resolved = resolveAxis(dx, dy);
@@ -237,4 +353,12 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
   }
 
   containerElement.addEventListener('pointerdown', onPointerDown);
+
+  return {
+    // Lets main.js disable interaction entirely while shuffle-on-load is running,
+    // matching upstream's finalShuffle guard - see the note above on `enabled`.
+    setEnabled(value) {
+      enabled = value;
+    },
+  };
 }
