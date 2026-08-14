@@ -1,0 +1,12 @@
+{
+  "name": "cuber",
+  "private": true,
+  "type": "module",
+  "description": "Build tooling only - the actual app is plain dependency-free ES modules (src/). Bundles + minifies for deployment; source with comments always stays in src/.",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --outfile=dist/main.js && esbuild style.css --minify --outfile=dist/style.css"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

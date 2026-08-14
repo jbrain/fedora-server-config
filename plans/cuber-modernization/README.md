@@ -8,7 +8,9 @@
 > `require.js`, `main.js`) permanently deleted from the live server; the original vendored
 > source stays checked into this repo (`JS/cuber/cuber.js`, `JS/cuber/init_cuber.js`) as
 > historical reference. See the "Final comparison" section below for the technology/size/
-> resource comparison between the old and new implementations.
+> resource comparison between the old and new implementations. Update (2026-08-14): production
+> now deploys an esbuild bundled+minified build instead of the raw per-file source - see
+> "Production build/bundling step" below.
 
 ## Segment 2 decisions (owner, 2026-08-13)
 
@@ -627,3 +629,73 @@ since the 2026-08-08 requirejs fix, zero effect beforehand — see Segment 1 fin
 first to `main.js.dead-20260813` in the same directory; verified via directory listing that
 `main.js` is gone and the backup is present. No functional change to the live site (the file had
 zero effect before deletion, since nothing enqueues it anymore).
+
+## Production build/bundling step (owner request, 2026-08-14)
+
+Owner wanted commented, unminified source kept in the repo but a minified build deployed to
+prod. Added [esbuild](https://esbuild.github.io/) as a dev-only build tool rather than hand-
+rolling minification — it's a single static binary (no transitive dependency tree to audit),
+had zero vulnerabilities once pinned to `^0.25.0` (0.24.x had a moderate-severity advisory,
+GHSA-67mh-4wv8-2f99, in its dev-server's CORS handling — irrelevant to this project's pure CLI
+bundling use, but pinned to the patched version anyway).
+
+- **`JS/cuber/package.json`** (new): declares `esbuild` as the sole devDependency and one
+  `"build"` script: `esbuild src/main.js --bundle --minify --outfile=dist/main.js && esbuild
+  style.css --minify --outfile=dist/style.css`. `"type": "module"` added so Node doesn't need to
+  guess/reparse `src/*.js` when running `cube.test.mjs`.
+- **`JS/cuber/dist/`** (build output, gitignored — see below): `main.js` (bundled+minified IIFE,
+  11,841 bytes) + `style.css` (minified, 1,588 bytes). Regenerate any time with `npm install &&
+  npm run build` from `JS/cuber/`.
+- **`.gitignore`**: added `JS/cuber/node_modules/` and `JS/cuber/dist/` — both are fully
+  regenerable build artifacts (same treatment as PHP's `vendor/`), so they're not committed;
+  `npm run build` must be re-run locally before every future deployment.
+- **Size, three-tier comparison**: old vendor bundle ~147 KB (minified, Segment 5 baseline) →
+  new unminified source ~48.6 KB (11 files + CSS, what's actually in `src/`) → new
+  bundled+minified ~13.2 KB (11.6 KB JS + 1.6 KB CSS) — roughly **91% smaller than the original
+  old bundle**, and about **73% smaller than the unminified rewrite**, while `src/` keeps 100%
+  of its comments and file boundaries for ongoing development.
+- **`functions.php` simplified**: since esbuild's browser-platform output (no `--format` flag)
+  is a plain self-executing IIFE, not an ES module, the previous `script_loader_tag` filter
+  workaround (forcing `type="module"` because this WP 6.9.6 build lacks
+  `wp_enqueue_script_module()`) is no longer needed at all and was removed. A plain
+  `wp_enqueue_script('cuber-main', ...)` call is now sufficient for the module/type concern.
+
+### Real bug found on first bundled deploy: missing defer caused `null.querySelector`
+
+First live check after swapping in the bundle produced a real page error: `TypeError: Cannot
+read properties of null (reading 'querySelector')` from inside `main.js`. Root cause: an ES
+module script (`type="module"`) is *automatically* deferred by the HTML spec regardless of
+where its `<script>` tag sits in the document — but a plain classic script (no `type="module"`,
+no `defer`/`async` attribute) runs synchronously, immediately, at parse time. This theme's
+`wp_enqueue_script(..., in_footer)` boolean was set to `false` (head placement) as a
+long-standing workaround for a separate, earlier-discovered bug where `in_footer => true`
+silently prints nothing at all in this theme. Once the bundle stopped being a module, it lost
+its automatic deferral, so it started running in `<head>`, before `#the-cube` existed in the
+DOM — `document.getElementById('the-cube')` returned `null`, and the next `.querySelector()`
+call on it threw.
+
+**Fix**: use WP 6.3+'s script-loading-strategy array form of `wp_enqueue_script()` — replace
+the trailing `in_footer` boolean with `array('strategy' => 'defer', 'in_footer' => false)`.
+This adds a real `defer` attribute (confirmed live: `<script ... defer="defer"
+data-wp-strategy="defer">`), keeping head placement (working around the footer-print bug) while
+restoring defer-until-DOM-ready timing equivalent to what `type="module"` gave for free.
+Verified via Playwright against the live page: zero console/page errors, `window.cube` exists
+with 27 cubelets, and a simulated drag on the live bundle still resolves correctly. This is a
+generalizable gotcha: **switching a `type="module"` script to a bundled classic/IIFE script
+loses automatic deferral — always add `defer` explicitly (or move to true `in_footer`
+placement) when doing this kind of module-to-bundle migration.**
+
+### Deployment procedure going forward
+
+1. Edit source in `JS/cuber/src/*.js` / `JS/cuber/style.css` as normal (comments intact).
+2. `cd JS/cuber && npm install && npm run build` (regenerates `dist/main.js` + `dist/style.css`).
+3. `node JS/cuber/src/cube.test.mjs` — confirm 25/25 still pass (state-model regression check).
+4. Deploy `dist/main.js` + `dist/style.css` (not the raw `src/` files) to
+   `wp-content/themes/jackbrain/js/cuber/`, matching ownership (`33:33`) and following the
+   existing backup-before-overwrite pattern used throughout this project.
+5. Restart the WordPress container (`sudo systemctl restart wordpress`) — required for the
+   `:Z` SELinux relabel of newly bind-mounted files, an established gotcha from earlier in this
+   project.
+6. Verify live: curl 200 check, then a real Playwright pass (zero console errors, `window.cube`
+   exists with 27 cubelets, a simulated drag resolves correctly) — a superficial curl-only check
+   is not sufficient, as this session's `defer` bug demonstrates.

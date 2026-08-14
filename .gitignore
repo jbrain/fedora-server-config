@@ -7,6 +7,10 @@ wordpress/secrets/jba-ampache-api-key
 vendor/
 .phpunit.result.cache
 
+# JS build artifacts (regenerable via `npm install && npm run build` in JS/cuber/)
+JS/cuber/node_modules/
+JS/cuber/dist/
+
 # Editor / OS noise
 .DS_Store
 Thumbs.db
