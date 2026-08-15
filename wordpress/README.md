@@ -96,6 +96,17 @@ If the site has taken writes (new posts/uploads) between the Task 01 DB copy and
 container going live, re-sync: re-dump `wordpress` from the system MariaDB and re-import into
 `shared-mariadb` (see `../database/README.md`) immediately before cutover.
 
+**Disaster-recovery gap, read before trusting this migration path today:** the
+`/usr/share/wordpress/wp-content` rollback copy referenced above is a frozen snapshot from
+2026-08-03 — it predates the cube engine rewrite (`plans/cuber-modernization/README.md`) and the
+2026-08-14 jQuery removal from the `jackbrain` theme entirely. If `/storage/wordpress/wp-content`
+is ever lost and this migration path runs again, the theme would silently revert to that stale,
+pre-modernization state. Two of the theme's files (`functions.php`, `js/jbrain.js`) are tracked
+in this repo specifically to guard against that — see
+[`theme/jackbrain/README.md`](theme/jackbrain/README.md) for why, and for the required
+post-recovery step of re-applying them (plus rebuilding/redeploying `JS/cuber/dist/`) before
+considering any from-scratch restore complete.
+
 ## Reverse-proxy / HTTPS correctness
 
 - `WORDPRESS_CONFIG_EXTRA` sets `WP_HOME`/`WP_SITEURL` to `https://jackson-brain.com` and
