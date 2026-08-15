@@ -10,6 +10,67 @@ Extend the existing cube feature with an academic, on-device visualization of ho
 
 The project must distinguish behavioral unpredictability from cryptographically secure randomness. It must not claim that cube gestures produce validated entropy, key strength, or security. Any salt, nonce, or key used for an actual cryptographic operation must be generated independently by Web Crypto.
 
+## Public release plan
+
+The reusable cube and entropy study will be released as a new public repository, separate from
+the private `fedora-server-config` infrastructure repository. The private repository remains the
+source of truth for WordPress templates, server deployment, backup paths, and theme-specific
+configuration. The public repository must be created from a clean export rather than by changing
+the visibility of this repository or publishing its history.
+
+### Naming
+
+Recommended public project name: **Cuber Interaction Entropy**.
+
+Recommended repository slug: `cuber-entropy`.
+
+This name describes both the interactive cube and the research visualization without tying the
+project to a person, website, CMS, or security claim. Alternatives considered are **Cuber Study**
+and **Cube Interaction Lab**; the recommended name is more discoverable and specific.
+
+The public repository should use the MIT license, with the copyright holder's exact preferred
+name in `LICENSE`. `qrcode` and esbuild are MIT-licensed; the public export must also include a
+`THIRD_PARTY_NOTICES.md` file for the bundled QR dependency and its transitive notices.
+
+### Public/private boundary
+
+The public export includes the portable browser source, tests, dependency manifests, neutral demo
+markup, CSS, generated distribution assets, research documentation, license, and contribution /
+security guidance. It excludes WordPress PHP, server paths, SSH/deployment instructions, private
+hostnames, backup details, temporary files, and theme assets.
+
+Before export, two source-specific items must be neutralized:
+
+1. Replace the digest domain `jackbrain-cube-interaction/v1` with a neutral public protocol name.
+  This is a protocol boundary and must be documented as a new public-release version.
+2. Remove the default `./images/jbrown.png` logo fallback from `render.js`. The public renderer
+  must use a neutral sticker or no logo unless an embedding host explicitly supplies a logo URL.
+
+The WordPress adapter continues to own `jbAbout.php`, the PHP enqueue/configuration code, and the
+public repository link. It will copy pinned public release assets into the private theme rather
+than load JavaScript from GitHub at runtime.
+
+### WordPress link and release pinning
+
+The production About template should add one restrained text link immediately below the cube and
+entropy section, for example `Cube Interaction Entropy on GitHub`. The public demo may include the
+same repository link, but neither version should mention Jackbrain or the WordPress theme.
+
+Each public release will be tagged, beginning with `v1.0.0`. The private deployment record will
+store the public tag, deployed JavaScript and CSS SHA-256 hashes, template hash, and backup
+timestamp. A public release is not complete until the clean export, dependency notice audit,
+privacy scan, 70-test suite, build, and private WordPress integration check all pass.
+
+### Publication gates
+
+- Clean export contains no private hostnames, paths, usernames, secrets, or theme references.
+- All source and documentation use neutral project terminology.
+- MIT `LICENSE` and `THIRD_PARTY_NOTICES.md` are present.
+- Digest namespace and logo behavior are neutralized and tested.
+- Public demo starts without WordPress and loads the built distribution artifact.
+- QR export and entropy qualification text clearly describe local-only, non-cryptographic behavior.
+- GitHub repository is reviewed privately before being made public.
+
 ## Current conclusions
 
 1. A cube session can provide educational observations about move choice, coarse timing, and coarse gesture variation.
@@ -400,3 +461,5 @@ On session resume:
 - 2026-08-15: Reviewed and deployed the current template and QR-enabled bundle under backup timestamp `20260815-152338`. All five live inputs were synchronized: `functions.php`, `js/jbrain.js`, `jbAbout.php`, `js/cuber/main.js`, and `js/cuber/style.css`. Verified hashes: functions `33fb24d700d7651b1a614449584a49eeb13bb408778567f1961f7d18b854bc92`; jbrain `2865549cdd070602bd6b3315370a2ac0721a9080b6702b8bcad0d26381898666`; template `b3aa507adc285e75cf5979eea22fe21342c7902f33172f71a29f0a108040b7bd`; JS `ea703710d111793a0ad4f937432dfd76b8b7688399c816dc7f2266490cca3b3d`; CSS `95b671e863d052d5b6ebd6dc8addb2a421e43ab41807b87eb20f5074b77d506a`. WordPress active; public About returned 200 and public JS/CSS hashes matched.
 - 2026-08-15: Propagated the reduced Methodology dialog to `jbAbout.php` under backup timestamp `20260815-153057`. The dialog retains the three references and now uses explicit `aria-label="Methodology"` after its explanatory heading was intentionally removed. Public About returned 200 with the reduced dialog, QR dialog, and no stale heading reference; WordPress is active.
 - 2026-08-15: Restored the Methodology heading and two explanatory paragraphs inside the modal while keeping the base About panel free of that text. Deployed `jbAbout.php` under backup timestamp `20260815-154349`; live browser verification confirmed 27 cubelets, valid heading association, three explanatory paragraphs, three references, and no explanation text in the base panel.
+- 2026-08-15: Public export prepared as **Cuber Interaction Entropy** in `public/cuber-entropy`, with neutral protocol/logo behavior, MIT license, dependency notices, public-project documentation, and a clean private-reference scan. The WordPress adapter now links to `https://github.com/jbrain/cuber-entropy` below the cube/entropy section. Public release publication and first tag remain the final gate after the staged export review.
+- 2026-08-15: Published `https://github.com/jbrain/cuber-entropy` as a public repository under MIT, with initial commit `fc6ec58` and tag `v1.0.0`. Public export passed the private-reference scan, 70-test suite, build, and dependency audit. The WordPress adapter link was deployed under backup timestamp `20260815-162529`; About returned 200 with the link and existing Methodology explanation.
