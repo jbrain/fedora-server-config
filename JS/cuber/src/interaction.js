@@ -1,23 +1,19 @@
 import { positionTransform } from './render.js';
 import { animateSettle, cssSweepDegrees } from './animation.js';
 import { getCommandAxisAndSign } from './cube.js';
+import { committedInteraction } from './interaction-record.js';
 
-// Interaction model (ground-truthed against the original engine - see
-// plans/cuber-modernization/README.md's "Ground-truth findings for 3d"):
-// - Dragging directly on a cubelet face twists the slice that face belongs to.
-// - Dragging on empty background performs a whole-cube X/Y/Z rotation instead -
-//   NOT a soft camera orbit; it's a real, committed twist using the exact same
-//   twist machinery, just affecting all 27 cubelets. The viewing tilt itself
-//   (.cube-group's CSS transform) never changes - "orbiting" is simulated by
-//   physically reorienting the cube's own state, which is what keeps the view
-//   pinned to one fixed hero angle instead of allowing free 360-degree orbit.
-const DRAG_THRESHOLD = 8; // px before a gesture commits to a rotation axis
-const SWIPE_VELOCITY = 0.5; // px/ms - a fast flick commits a full turn regardless of distance
-const PIXELS_PER_QUARTER_TURN = 150; // drag this many px along the resolved axis for 90 degrees
+// Dragging directly on a visible face rotates that face's layer. Dragging on empty space
+// rotates the entire cube around a fixed viewing axis. The current tilt is not a free camera
+// orbit; it is represented by the cube's state being rotated while the display angle remains
+// constant.
+const DRAG_THRESHOLD = 8; // px before the drag is considered a meaningful rotation
+const SWIPE_VELOCITY = 0.5; // px/ms; a quick flick may commit a full turn even before the threshold is met
+const PIXELS_PER_QUARTER_TURN = 150; // pixels of resolved drag per 90-degree turn
+const TOUCH_PIXELS_PER_QUARTER_TURN = 100;
+const INTERACTIVE_SELECTOR = '.entropy-study, a, button, input, textarea, select, option, label, [contenteditable="true"], [role="button"]';
 
-// For a grabbed face (by direction id, matching ALL_DIRECTIONS: front/up/right/
-// down/left/back), the two axes perpendicular to that face's own normal - those
-// are the only two a drag on that face could plausibly be rotating around.
+// For a face drag, only the two axes perpendicular to that face normal are relevant.
 const FACE_AXES = {
   0: ['x', 'y'], // front
   1: ['x', 'z'], // up
@@ -27,20 +23,17 @@ const FACE_AXES = {
   5: ['x', 'y'], // back
 };
 
-// Which twist command letter corresponds to a given axis + which layer along it
-// (by the grabbed/rotating cubelet's own coordinate, -1/0/1) - reuses the exact
-// same letters already ground-truthed in cube.js.
+// The same move letters used by the logical cube model are also used here to resolve a drag
+// into a specific layer of the appropriate axis.
 const LETTERS_BY_AXIS = {
   x: ['L', 'M', 'R'],
   y: ['D', 'E', 'U'],
   z: ['B', 'S', 'F'],
 };
 
-// Projects a world-space unit axis through the cube-group's CURRENT CSS transform
-// into 2D screen space, using the browser's own DOMMatrix instead of reimplementing
-// 3D projection math - a real simplification over the original engine's custom
-// Vector3/Matrix4/Plane-based Projector class, made possible by rendering real DOM
-// elements instead of an abstract Three.js scene graph.
+// Projects a world-space axis through the cube group's current CSS transform into screen
+// space. This relies on the browser's own matrix support rather than a custom 3D projection
+// implementation.
 function projectAxisToScreen(groupElement, axis) {
   const matrix = new DOMMatrixReadOnly(getComputedStyle(groupElement).transform);
   // Y is negated here for the same reason render.js negates it when positioning
@@ -50,10 +43,8 @@ function projectAxisToScreen(groupElement, axis) {
   return { x: tip.x - origin.x, y: tip.y - origin.y };
 }
 
-// Same idea as projectAxisToScreen but keeps all 3 output components - the group's own
-// CSS transform is a pure rotation (perspective is applied separately, to #the-cube
-// itself), so this gives an accurate 3D-rotated vector, not just its flattened screen
-// shadow. Needed for the real cross-product axis math below.
+// Like projectAxisToScreen, but preserves the full 3D vector. This is used when the drag
+// direction must be related to a face normal and evaluated by cross-product logic.
 function transformVector3D(groupElement, vec) {
   const matrix = new DOMMatrixReadOnly(getComputedStyle(groupElement).transform);
   const origin = matrix.transformPoint(new DOMPoint(0, 0, 0));
@@ -63,8 +54,8 @@ function transformVector3D(groupElement, vec) {
 
 const AXIS_VECTORS = { x: { x: 1, y: 0, z: 0 }, y: { x: 0, y: 1, z: 0 }, z: { x: 0, y: 0, z: 1 } };
 
-// Absolute Direction-id-indexed face normals (front/up/right/down/left/back), matching
-// ALL_DIRECTIONS/direction.js's own convention (state-model coordinates, Y+ up).
+// Fixed face normals in state-model coordinates. These values align with the cube's own
+// direction objects.
 const FACE_NORMALS = [
   { x: 0, y: 0, z: 1 }, // front
   { x: 0, y: 1, z: 0 }, // up
@@ -81,18 +72,14 @@ function dot3D(a, b) {
   return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-// Resolves which candidate axis a drag actually twists. Ground-truthed against the
-// real ERNO.Interaction algorithm - and a real, reported bug fixed by this ground-
-// truthing: the resolved axis must be PERPENDICULAR to the drag direction, not
-// aligned with it (`axis = cross(faceNormal, dragDirectionOnPlane)` - a cross product
-// is by definition perpendicular to both its inputs). An earlier version of this
-// picked whichever candidate axis's OWN screen projection was most ALIGNED with the
-// drag vector - backwards, confirmed both by re-deriving the cross-product math (for
-// the front face, cross(normalZ, s*X+t*Y) = s*Y - t*X, i.e. the dominant component
-// SWAPS from X to Y) and by the live report: "dragging left/right on any cube in the
-// layer spins horizontally [Y-axis, U/E/D], dragging up/down rotates vertically
-// [X/Z-axis, L/M/R or B/S/F]" - which is exactly the perpendicular relationship, not
-// the aligned one this code previously computed.
+function isInteractiveTarget(target) {
+  return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;
+}
+
+// Resolves the actual turn axis from a drag. The correct relationship is perpendicular to the
+// drag direction in the face plane, not parallel to it. The face drag case is computed by
+// decomposing the screen drag into the local plane basis and comparing the result with the
+// candidate axes.
 function pickAxis(candidateAxes, groupElement, dragX, dragY, directionId) {
   const projected = candidateAxes.map((axisName) => ({ axisName, screen: projectAxisToScreen(groupElement, axisName) }));
 
@@ -124,12 +111,9 @@ function pickAxis(candidateAxes, groupElement, dragX, dragY, directionId) {
       : { axisName: b.axisName, projected, directionId, alongAxis: scoreB };
   }
 
-  // BACKGROUND (whole-cube) drag: the "clicked plane" is the viewport itself, facing
-  // the camera - so its normal is the fixed screen/view Z axis (0,0,1), untransformed
-  // by the group's own rotation. cross((0,0,1), (dx,dy,0)) = (-dy, dx, 0): a plain 90-
-  // degree rotation of the drag vector in screen space. Matches upstream's own
-  // background-drag logic (`ERNO.Locked`), which also rotates the drag vector 90
-  // degrees (`c.set(q.y*-1, q.x, 0)`) before matching it to the nearest cardinal axis.
+  // For a whole-cube drag, the reference plane is the screen itself. The move direction is
+  // therefore rotated by 90 degrees in screen space before matching it to the nearest cube
+  // axis. The result is a large-surface orbit implemented as a real state rotation.
   const rotated = { x: -dragY, y: dragX };
   let best = null;
   let bestAbsScore = -Infinity;
@@ -144,10 +128,9 @@ function pickAxis(candidateAxes, groupElement, dragX, dragY, directionId) {
   return best;
 }
 
-// Recomputes "how far the drag has moved along the resolved axis" (in screen-pixel-
-// equivalent world units) for the CURRENT drag delta, using the same method pickAxis
-// used to choose the axis in the first place - kept as one function so axis selection
-// and the live preview/commit angle can never drift out of sync with each other.
+// Measures how far the drag has moved along the resolved axis in screen-space-equivalent
+// units. This value is used to convert the drag into an angular preview and to keep the
+// preview math aligned with the axis resolution.
 function alongResolvedAxis(resolved, dragX, dragY, groupElement) {
   if (resolved.directionId !== null) {
     const [a, b] = resolved.projected;
@@ -176,32 +159,26 @@ function alongResolvedAxis(resolved, dragX, dragY, groupElement) {
 
 export function attachInteraction({ cube, containerElement, groupElement, onCommitted }) {
   let drag = null;
-  let isSettling = false; // blocks starting a new gesture while a previous one's settle animation plays
-  // Blocks ALL gestures outright - matches upstream's own
-  // `mouseInteraction.enabled = mouseControlsEnabled && !finalShuffle`, which disables
-  // interaction entirely while a shuffle sequence is running. Missing this exact guard
-  // was a real bug: a user dragging during/around shuffle-on-load raced against it (both
-  // independently call cube.twist()/write DOM styles), which could resolve a gesture's
-  // command against a since-changed layer and leave the cube looking "corrupted" -
-  // reported live as "not all drags complete" / "easy to corrupt everything".
-  let enabled = true;
+  let isSettling = false; // Prevents a new drag from starting before the previous settle animation finishes.
+  let enabled = true; // Interaction is disabled while an automated scramble is running.
 
   function reset() {
     drag = null;
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerCancel);
   }
 
   function cubeletElement(id) {
     return containerElement.querySelector(`[data-cubelet-id="${id}"]`);
   }
 
-  // Resolves (once, the first time drag distance crosses the threshold) which
-  // axis/slice/command this gesture is twisting, based on where it started and
-  // its direction so far. Returns null until enough drag distance has occurred.
+  // Determines the target axis and move once the gesture has moved far enough to be a real
+  // turn rather than a slight wobble. The result is cached so the same drag stays consistent.
   function resolveAxis(dx, dy) {
     if (drag.resolved) return drag.resolved;
     if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return null;
+    if (drag.horizontalOnly && Math.abs(dy) >= Math.abs(dx)) return null;
 
     const candidateAxes = drag.onFace ? FACE_AXES[drag.directionId] : ['x', 'y', 'z'];
     const picked = pickAxis(candidateAxes, groupElement, dx, dy, drag.onFace ? drag.directionId : null);
@@ -223,28 +200,19 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
     return drag.resolved;
   }
 
-  // Continuously previews the in-progress rotation by applying a live CSS rotation
-  // on top of each affected cubelet's normal position transform - the actual state
-  // model isn't touched until the gesture ends (mirrors the original engine's own
-  // "state and visuals stay separate" design, see plans/cuber-modernization/README.md).
-  //
-  // Returns degrees in the AXIS's own natural-sign convention (matching `rotateSteps`'s
-  // `sign: 1` case for that axis) - NOT a specific command's sign, and NOT yet CSS
-  // degrees (see cssSweepDegrees). `alongResolvedAxis` gives "how far the drag has moved
-  // along the resolved axis" in screen-pixel-equivalent world units (via the same 2x2
-  // basis solve/dot-product used to pick the axis - see pickAxis above), which is then
-  // scaled by a fixed pixels-per-quarter-turn constant into degrees.
-  function previewDegrees(resolved, dx, dy) {
+  // Applies a live preview transform to the affected cubelets while the drag is in progress.
+  // The logical state is not modified until the drag is committed. The returned angle is in
+  // the axis's natural model convention before being converted to CSS coordinates.
+  function previewDegrees(resolved, dx, dy, pointerType) {
     const projectedPixels = alongResolvedAxis(resolved, dx, dy, groupElement);
-    return (projectedPixels / PIXELS_PER_QUARTER_TURN) * 90;
+    const pixelsPerQuarterTurn = pointerType === 'touch'
+      ? TOUCH_PIXELS_PER_QUARTER_TURN
+      : PIXELS_PER_QUARTER_TURN;
+    return (projectedPixels / pixelsPerQuarterTurn) * 90;
   }
 
-  // `axisDegrees` is in the axis's own natural-sign convention (see previewDegrees) -
-  // must go through cssSweepDegrees before use as an actual CSS rotate angle, or a
-  // Y-axis drag renders backwards relative to what gets committed (ground-truthed:
-  // CSS rotateY is inverted relative to the model's own sign, rotateX/rotateZ are not
-  // - see animation.js). Getting this wrong here is invisible until the settle
-  // animation exposes it as a direction reversal - it was caught exactly that way.
+  // The preview angle must be converted into CSS space before it is applied to the DOM. This
+  // keeps the visual direction aligned with the underlying model when the axis sign differs.
   function applyPreview(resolved, axisDegrees) {
     const rotateFn = { x: 'rotateX', y: 'rotateY', z: 'rotateZ' }[resolved.axisName];
     const cssDegrees = cssSweepDegrees(resolved.axisName, axisDegrees);
@@ -256,56 +224,70 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
 
   function onPointerDown(event) {
     if (!enabled) return;
+    if (drag) return;
     if (event.button !== undefined && event.button !== 0) return;
-    // Matches upstream's own touchstart preventDefault - belt-and-suspenders alongside
-    // #the-cube's `touch-action: none` against the browser claiming this gesture for
-    // native scroll/pan/zoom before it's even resolved into a cube rotation.
-    event.preventDefault();
-    if (isSettling) return; // don't let a new gesture fight an in-progress settle animation
-
     const faceEl = event.target.closest('.face');
+    if (!faceEl && isInteractiveTarget(event.target)) return;
+
+    if (isSettling) return; // Ignore new input while a previous settle animation is still running.
+
+    const startsInsideCube = containerElement.contains(event.target);
+    if (startsInsideCube) event.preventDefault();
 
     drag = {
+      pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       startTime: performance.now(),
       onFace: !!faceEl,
       cubeletId: faceEl ? Number(faceEl.closest('.cubelet').dataset.cubeletId) : null,
       directionId: faceEl ? Number(faceEl.dataset.directionId) : null,
+      pointerType: event.pointerType,
+      horizontalOnly: event.pointerType === 'touch' && !startsInsideCube,
       resolved: null,
     };
 
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
   }
 
   function onPointerMove(event) {
-    if (!drag) return;
-    // Defense-in-depth alongside #the-cube's `touch-action: none` (matching upstream's
-    // own `event.preventDefault()` in its touchmove handler) - stops a touch drag from
-    // also scrolling/panning the page underneath the gesture.
-    event.preventDefault();
+    if (!drag || event.pointerId !== drag.pointerId) return;
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
     const resolved = resolveAxis(dx, dy);
-    if (resolved) applyPreview(resolved, previewDegrees(resolved, dx, dy));
+    if (resolved) {
+      event.preventDefault();
+      applyPreview(resolved, previewDegrees(resolved, dx, dy, drag.pointerType));
+    }
   }
 
-  // On release: settles smoothly from wherever the live preview left off, rather than
-  // snapping instantly - this is the "slightly magnetized" feel the owner specifically
-  // asked to preserve. A committed twist settles onward to the nearest 90-degree
-  // position; an abandoned (too-short, too-slow) drag settles BACK to 0 instead.
+  function onPointerCancel(event) {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (drag.resolved) {
+      drag.resolved.affectedCubelets.forEach((cubelet) => {
+        cubeletElement(cubelet.id).style.transform = positionTransform(cubelet.x, cubelet.y, cubelet.z);
+      });
+    }
+    reset();
+  }
+
+  // When the drag ends, the cube settles from the previewed angle toward the nearest quarter-
+  // turn. If the drag is too weak or too short, it settles back to the original orientation.
   async function onPointerUp(event) {
-    if (!drag) return;
+    if (!drag || event.pointerId !== drag.pointerId) return;
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
-    const elapsed = performance.now() - drag.startTime;
+    const committedAt = performance.now();
+    const elapsed = committedAt - drag.startTime;
     const resolved = drag.resolved;
+    const pointerType = drag.pointerType;
     reset();
 
     if (!resolved) return;
 
-    const axisDegrees = previewDegrees(resolved, dx, dy);
+    const axisDegrees = previewDegrees(resolved, dx, dy, pointerType);
     const velocity = Math.hypot(dx, dy) / elapsed;
     let quarterTurns = Math.round(axisDegrees / 90);
     if (quarterTurns === 0 && velocity > SWIPE_VELOCITY) {
@@ -325,13 +307,9 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
         toDegrees: 0,
       });
     } else {
-      // Convert "axis-natural-sign quarter turns" into the correctly-cased command
-      // letter + always-positive degrees - the command's OWN sign (ground-truthed in
-      // cube.js, e.g. M is opposite of R despite sharing the x axis) may or may not
-      // match the axis's natural sign, so this can't just reuse `resolved.command`
-      // and `quarterTurns * 90` directly (that was the actual bug: a Y-axis or
-      // opposite-signed-letter drag would preview correctly but commit to the wrong
-      // rotation, only visible once the settle animation exposed the mismatch).
+      // Convert the previewed axis rotation into the canonical command form. The command's
+      // sign may differ from the axis's natural sign, so the letter case and magnitude must be
+      // mapped explicitly.
       const { sign: commandSign } = getCommandAxisAndSign(resolved.command);
       const wantsPositiveCommandDirection = Math.sign(quarterTurns) === commandSign;
       const command = wantsPositiveCommandDirection
@@ -347,13 +325,17 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
         fromDegrees: fromCssDegrees,
         toDegrees: cssSweepDegrees(result.axis, result.modelDegrees),
       });
-      onCommitted();
+      onCommitted(committedInteraction({
+        command,
+        quarterTurns: Math.abs(quarterTurns),
+        pointerType,
+        dx,
+        dy,
+        elapsedMs: elapsed,
+        committedAt,
+      }));
 
-      // Fires once, exactly on the transition into a solved state - not on every
-      // commit while already solved (e.g. a twist immediately undone) - so a future
-      // celebration/notification hooks into a real "the user just solved it" moment,
-      // not a noisy repeat. No listener attached here by design; this is the event
-      // itself, left for whatever UI wants to react to it later.
+      // Emits a solved event only when the cube transitions from unsolved to solved.
       if (!wasSolved && cube.isSolved()) {
         containerElement.dispatchEvent(new CustomEvent('cubesolved', { bubbles: true }));
       }
@@ -362,11 +344,12 @@ export function attachInteraction({ cube, containerElement, groupElement, onComm
     isSettling = false;
   }
 
-  containerElement.addEventListener('pointerdown', onPointerDown);
+  // Document-level initiation makes the page surrounding the cube an orbit control surface.
+  // Interactive controls are excluded above so their default actions remain available.
+  document.addEventListener('pointerdown', onPointerDown);
 
   return {
-    // Lets main.js disable interaction entirely while shuffle-on-load is running,
-    // matching upstream's finalShuffle guard - see the note above on `enabled`.
+    // Allows the caller to disable input during automated moves such as an initial scramble.
     setEnabled(value) {
       enabled = value;
     },

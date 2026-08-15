@@ -1,25 +1,17 @@
-// Renders the live Cube state model as 27 real DOM cubelets, reusing the exact
-// per-face transform pattern proven by the 3a placeholder (.face--front/back/
-// right/left/up/down in style.css) - just parameterized to this cubelet's
-// half-size instead of the placeholder's hardcoded 100px, via inline style
-// (which overrides the placeholder rules' --cube-size-based values).
+// Renders the cube state as 27 DOM cubelets. This module owns the coordinate-to-transform
+// mapping and the per-face sticker rendering for each cubelet.
 
 import { COLORLESS } from './color.js';
 
-// Matches production's real default cubelet size - ERNO.Cube's `textureSize` option
-// defaults to 120 (not the 130 first guessed here), ground-truthed by reading the
-// actual constructor default in cuber.js (`a.textureSize = ... ? ... : 120`) rather
-// than eyeballing a screenshot, which wasn't precise enough to catch a ~10% oversize.
-// Sized down slightly further from that ground-truthed 120px per owner request -
-// style.css's #the-cube/.cube-group dimensions must stay in sync with this value.
+// The cubelet size is a fixed visual dimension. The CSS file must stay aligned with this value
+// when the group dimensions are set.
 export const CUBELET_SIZE = 100;
 export const GAP = 2;
 export const SPACING = CUBELET_SIZE + GAP;
 const HALF = CUBELET_SIZE / 2;
 
-// Matches production's "purty" JB logo sticker (images/jbrown.png). Overridable
-// via window.CUBER_LOGO_URL so the WordPress theme integration can point at its
-// own already-existing theme asset URL without touching this module.
+// The logo sticker uses a configurable URL so the same cube renderer can be hosted in multiple
+// environments without hard-coding a path to a specific theme or page.
 const LOGO_URL = (typeof window !== 'undefined' && window.CUBER_LOGO_URL) || './images/jbrown.png';
 
 // Index order matches ALL_DIRECTIONS / cubelet.faces (front/up/right/down/left/back).
@@ -33,18 +25,14 @@ const FACE_TRANSFORMS = [
 ];
 const FACE_NAMES = ['front', 'up', 'right', 'down', 'left', 'back'];
 
-// Cubelet position -> CSS translate3d, shared with interaction.js's live drag preview
-// so both always agree on where a cubelet sits for a given (x, y, z).
+// Maps a cubelet coordinate to a CSS transform. The Y dimension is inverted to match the web
+// coordinate system, where positive Y points downward on screen.
 export function positionTransform(x, y, z) {
-  // State model's Y+ is "up" (math convention); CSS's Y+ is "down" (screen
-  // convention) - negate Y or the cube renders upside-down.
   return `translate3d(${x * SPACING}px, ${-y * SPACING}px, ${z * SPACING}px)`;
 }
 
-// Returns the existing .cube-group element, creating the full 27-cubelet DOM
-// structure on first call. Re-renders (twist/orbit completion) reuse the same
-// elements and just update each cubelet's transform/colors, so interaction.js's
-// live drag-preview transforms on those same elements aren't wiped out mid-drag.
+// Renders or refreshes the 27-cubelet DOM structure. Existing elements are reused so live drag
+// previews can update transforms without removing the underlying cube structure.
 export function renderCube(cube, containerElement) {
   let group = containerElement.querySelector('.cube-group');
   let cubeletEls = group ? null : new Map();

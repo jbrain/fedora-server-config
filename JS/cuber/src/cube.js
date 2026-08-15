@@ -4,20 +4,10 @@ import { Cubelet, positionToAddress } from './cubelet.js';
 import { SOLVED_COLOR_MAP } from './solved-color-map.js';
 import { rotateSteps } from './rotation.js';
 
-// Per-command rotation spec: which cardinal axis it turns on, which cubelets it
-// affects (by their CURRENT position, since that changes after every twist), and
-// its rotation `sign`.
-//
-// `sign` is NOT simply "uppercase = clockwise" for every letter - it was
-// ground-truthed command-by-command against the original engine's actual live
-// behavior (see plans/cuber-modernization/README.md), because real Rubik's-cube
-// notation is not fully symmetric: R/U/F share one sign, L/D/B are the opposite,
-// and the three middle slices don't follow a single consistent rule either - M
-// matches L (opposite of R), while E and S both match U/F (not D/B). The three
-// whole-cube commands (X/Y/Z) each match their same-letter-family face (R/U/F
-// respectively). Do not "simplify" this table from assumed symmetry without
-// re-verifying against the original engine; that's exactly the kind of subtle
-// bug this project is designed to avoid.
+// Each move is defined by the axis it turns around, the layer(s) it affects in the current
+// state, and the sign of that rotation. The sign table is explicit rather than inferred from
+// a simple letter-case rule because the observed behavior is not completely symmetric across
+// all move names.
 const COMMANDS = {
   R: { axis: 'x', sign: 1, filter: (c) => c.x === 1 },
   L: { axis: 'x', sign: -1, filter: (c) => c.x === -1 },
@@ -28,33 +18,24 @@ const COMMANDS = {
   F: { axis: 'z', sign: 1, filter: (c) => c.z === 1 },
   B: { axis: 'z', sign: -1, filter: (c) => c.z === -1 },
   S: { axis: 'z', sign: 1, filter: (c) => c.z === 0 },
-  // Whole-cube rotations (all 27 cubelets) - these are NOT a dead keyboard-only
-  // debug feature (an earlier pass in this project wrongly assumed that and
-  // skipped them - see plans/cuber-modernization/README.md). Production's actual
-  // drag-to-orbit interaction (ERNO.Locked) commits these as real twists when
-  // dragging outside the cube. Ground-truthed: X matches R's sign, Y matches U's,
-  // Z matches F's (all +1) - confirmed by exact-match live comparison, not assumed.
+  // Whole-cube turns rotate every cubelet. These are not special-case debug-only commands;
+  // they correspond to the cube's large-surface drag behavior and are treated as real moves.
   X: { axis: 'x', sign: 1, filter: () => true },
   Y: { axis: 'y', sign: 1, filter: () => true },
   Z: { axis: 'z', sign: 1, filter: () => true },
 };
 
-// Exposes a command's axis + intrinsic sign without duplicating the ground-truthed
-// table above elsewhere (the interaction layer needs this to convert a drag's
-// "axis-natural-sign" rotation amount into the correctly-cased command letter -
-// see plans/cuber-modernization/README.md's Segment 3d/3e notes on why this
-// matters: two independently-derived sign conventions silently disagreeing is
-// exactly the kind of bug this project has hit more than once).
+// Exposes the move's axis and its intrinsic sign. This is used where a drag preview must be
+// converted into the canonical command form without guessing at the sign convention.
 export function getCommandAxisAndSign(command) {
   const spec = COMMANDS[command.toUpperCase()];
   if (!spec) throw new Error(`Unknown twist command: ${command}`);
   return { axis: spec.axis, sign: spec.sign };
 }
 
-// Production's actual default shuffle move set (ERNO.Cube's PRESERVE_LOGO) -
-// deliberately excludes F/M/E because they'd rotate or move the front-center
-// logo-sticker cubelet. Ground-truthed from the original engine's own source
-// (this.shuffleMethod = this.PRESERVE_LOGO = 'RrLlUuDdSsBb'), not guessed.
+// The default shuffle set deliberately avoids moves that would rotate or relocate the
+// front-center logo sticker. This preserves the special sticker while still producing a
+// visually varied scramble.
 const SHUFFLE_COMMANDS = ['R', 'L', 'U', 'D', 'S', 'B'];
 
 export class Cube {
@@ -68,11 +49,9 @@ export class Cube {
     this.cubelets.forEach((c) => { this.byAddress[c.address] = c; });
   }
 
-  // Applies one twist (either a Twist instance, or a command letter + optional degrees).
-  // Returns { twist, axis, modelDegrees, cubelets } where `cubelets` is the affected
-  // cubelets' PRE-twist {id, x, y, z} - the animation layer needs this to sweep a
-  // smooth rotational arc from the old position rather than jump straight to the new
-  // one (see plans/cuber-modernization/README.md's Segment 3e notes).
+  // Applies a single move and returns the pre-twist positions of the affected cubelets. The
+  // animation layer uses those coordinates to sweep a smooth motion from the previous layout
+  // instead of snapping directly to the new orientation.
   twist(commandOrTwist, degrees) {
     const t = commandOrTwist instanceof Twist ? commandOrTwist : new Twist(commandOrTwist, degrees);
     const spec = COMMANDS[t.command.toUpperCase()];
@@ -83,9 +62,8 @@ export class Cube {
     const affected = this.cubelets.filter(spec.filter);
     const preTwistPositions = affected.map((c) => ({ id: c.id, x: c.x, y: c.y, z: c.z }));
 
-    // Compute every affected cubelet's new position/orientation from the CURRENT
-    // (pre-twist) state before mutating any of them, so cubelets never see each
-    // other's already-updated state mid-rotation.
+    // Each cubelet is repositioned from the current state before any mutation occurs, so the
+    // rotation is computed from the original layout rather than a partially updated one.
     const updates = affected.map((cubelet) => {
       const newPosition = rotateSteps(
         { x: cubelet.x, y: cubelet.y, z: cubelet.z },
@@ -113,11 +91,9 @@ export class Cube {
     return { twist: t, axis: spec.axis, modelDegrees: effectiveSign * quarterTurns * 90, cubelets: preTwistPositions };
   }
 
-  // Shuffles with `amount` random twists, never immediately reversing the previous one.
-  // `onEachTwist(result)`, if given, is awaited after each individual twist - the caller
-  // can use this hook to animate each step (see main.js) without duplicating this
-  // random-non-reversing selection logic. Without it, shuffles happen instantly/
-  // synchronously (e.g. for tests).
+  // Produces a scramble by applying a sequence of random legal turns without immediately
+  // reversing the previous move. If a callback is supplied, it is awaited after each move so
+  // a caller can animate the scramble step by step.
   async shuffle(amount = 25, onEachTwist) {
     let lastInverseCommand = null;
     const results = [];

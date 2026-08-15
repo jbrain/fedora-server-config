@@ -12,6 +12,13 @@
 > now deploys an esbuild bundled+minified build instead of the raw per-file source - see
 > "Production build/bundling step" below.
 
+> **2026-08-15 follow-up:** the theme now includes an opt-in, local-only cube interaction
+> entropy study. It displays a clearly labeled novelty heuristic, an independent Web Crypto salt,
+> and a conditioned SHA-256 transcript digest without storing or transmitting interaction data.
+> The feature also extends whole-cube orbit controls across safe page regions and preserves
+> separate touch gutters on phones. See `../cuber-entropy/README.md` for its mathematics,
+> terminology, privacy boundary, implementation phases, review findings, and validation record.
+
 ## Segment 2 decisions (owner, 2026-08-13)
 
 1. **Pathway: owner deferred to the recommendation above — going with Pathway A** (drop
@@ -542,10 +549,10 @@ Pathway A (see "Segment 2 decisions" above).
 
 | | Old (removed) | New (live) |
 |---|---|---|
-| **Core dependencies** | Three.js r66 (2014) + TWEEN.js r12 (2012) + RequireJS (AMD loader), Closure-Compiler-built into one minified bundle (no build config in this repo - a black box) | Zero dependencies - plain native ES modules (`import`/`export`), no build step, real source is what ships |
-| **Live-loaded JS (actual browser transfer)** | `require.js` + `cube.js` + `cuber.min.js` + `initCube.min.js` = **150,542 bytes (~147 KB)**, all minified | 11 plain `.js` files = **44,967 bytes (~44 KB)** unminified/uncompiled |
-| **CSS** | Embedded in the theme's global `style.css` (~215 lines of cube-specific rules, since removed) | Dedicated `js/cuber/style.css`, **4,844 bytes** |
-| **Total cube-specific footprint** | ~147 KB JS + embedded CSS | ~48.6 KB JS+CSS combined - **roughly a 67% reduction**, despite having zero minification at all |
+| **Core dependencies** | Three.js r66 (2014) + TWEEN.js r12 (2012) + RequireJS (AMD loader), Closure-Compiler-built into one minified bundle (no build config in this repo - a black box) | Zero runtime dependencies; commented ES-module source bundled and minified with esbuild for deployment |
+| **Live-loaded JS (actual browser transfer)** | `require.js` + `cube.js` + `cuber.min.js` + `initCube.min.js` = **150,542 bytes (~147 KB)**, all minified | One generated IIFE bundle, currently about **19.7 KB**, including the optional entropy study |
+| **CSS** | Embedded in the theme's global `style.css` (~215 lines of cube-specific rules, since removed) | One generated feature stylesheet, currently about **4.5 KB** |
+| **Total cube-specific footprint** | ~147 KB JS + embedded CSS | About **24.2 KB JS+CSS combined**, roughly **84% smaller** than the removed chain while adding the entropy study |
 | **DOM nodes per cubelet face** | 6 (`.face` + `.wireframe` + `.id`+`.underline` + `.text` + `.sticker`, most `display:none` debug-only elements) | 2 (`.face` + `.sticker`) - about **1/3 the element count**, ~972 -> ~324 elements across all 27 cubelets |
 | **3D math** | Full `THREE.Object3D`/`Quaternion`/`Matrix4`/`Euler` machinery for every cubelet, every frame | Plain integer `{x,y,z}` coordinate arithmetic - no matrix/vector/quaternion library needed at all, since every twist is an exact 90°-multiple rotation around a cardinal axis |
 | **Rendering** | Custom `CSS3DRenderer` re-serializes a full `matrix3d(...)` string from a THREE matrix for every object, every frame, inside a `requestAnimationFrame` loop that **runs forever, even fully at rest** | Plain `transform: translate3d()/rotateX/Y/Z()` strings written directly, no serialization step - **zero continuous per-frame JS work**; only runs during an actual twist/settle |
@@ -553,7 +560,7 @@ Pathway A (see "Segment 2 decisions" above).
 | **Global scope hygiene** | Monkey-patches `Number.prototype`/`String.prototype`/`Array.prototype` with dozens of custom methods; unscoped `document`-level keyboard listener twists the cube from a keypress anywhere on the page | Zero prototype modification; all listeners scoped to the cube's own container element (plus `window` only for the duration of an active drag); no keyboard control (out of scope per Segment 2) |
 | **Known bugs inherent to the old architecture** | Real camera-aspect-ratio bug (computed once from `window.innerWidth/innerHeight` at construction, never the real container box, never recalculated on resize) | No camera/aspect-ratio concept exists at all in a flat-CSS-perspective architecture - this entire bug class is structurally impossible now |
 | **Accessibility** | No `prefers-reduced-motion` support, no visibility-based deferral | `prefers-reduced-motion` collapses animations to instant; shuffle-on-load deferred via `IntersectionObserver` until actually scrolled into view |
-| **Debuggability** | Minified/Closure-compiled bundle - real source not available in devtools without external source maps (none shipped) | Plain, unminified ES module source is exactly what ships and what devtools shows - no source maps needed |
+| **Debuggability** | Minified/Closure-compiled bundle - real source not available in devtools without external source maps (none shipped) | Commented module source remains in the repo with focused tests; only the generated minified bundle ships |
 
 ### Solved-state event (owner request, 2026-08-13)
 
@@ -644,16 +651,14 @@ bundling use, but pinned to the patched version anyway).
   style.css --minify --outfile=dist/style.css`. `"type": "module"` added so Node doesn't need to
   guess/reparse `src/*.js` when running `cube.test.mjs`.
 - **`JS/cuber/dist/`** (build output, gitignored — see below): `main.js` (bundled+minified IIFE,
-  11,841 bytes) + `style.css` (minified, 1,588 bytes). Regenerate any time with `npm install &&
+  currently about 19.7 KB) + `style.css` (currently about 4.5 KB). Regenerate any time with `npm install &&
   npm run build` from `JS/cuber/`.
 - **`.gitignore`**: added `JS/cuber/node_modules/` and `JS/cuber/dist/` — both are fully
   regenerable build artifacts (same treatment as PHP's `vendor/`), so they're not committed;
   `npm run build` must be re-run locally before every future deployment.
-- **Size, three-tier comparison**: old vendor bundle ~147 KB (minified, Segment 5 baseline) →
-  new unminified source ~48.6 KB (11 files + CSS, what's actually in `src/`) → new
-  bundled+minified ~13.2 KB (11.6 KB JS + 1.6 KB CSS) — roughly **91% smaller than the original
-  old bundle**, and about **73% smaller than the unminified rewrite**, while `src/` keeps 100%
-  of its comments and file boundaries for ongoing development.
+- **Current comparison after the entropy-study extension**: old vendor chain ~147 KB minified →
+  current bundled feature about 24.2 KB JS+CSS, roughly **84% smaller**, while `src/` keeps its
+  comments and file boundaries for ongoing development.
 - **`functions.php` simplified**: since esbuild's browser-platform output (no `--format` flag)
   is a plain self-executing IIFE, not an ES module, the previous `script_loader_tag` filter
   workaround (forcing `type="module"` because this WP 6.9.6 build lacks
@@ -689,9 +694,9 @@ placement) when doing this kind of module-to-bundle migration.**
 
 1. Edit source in `JS/cuber/src/*.js` / `JS/cuber/style.css` as normal (comments intact).
 2. `cd JS/cuber && npm install && npm run build` (regenerates `dist/main.js` + `dist/style.css`).
-3. `node JS/cuber/src/cube.test.mjs` — confirm 25/25 still pass (state-model regression check).
-4. Deploy `dist/main.js` + `dist/style.css` (not the raw `src/` files) to
-   `wp-content/themes/jackbrain/js/cuber/`, matching ownership (`33:33`) and following the
+3. `npm test` — run the cube model and every interaction/entropy/digest/session regression.
+4. Deploy `dist/main.js` + `dist/style.css` (not the raw `src/` files) and the tracked
+  `wordpress/theme/jackbrain/jbAbout.php` template, matching ownership (`33:33`) and following the
    existing backup-before-overwrite pattern used throughout this project.
 5. Restart the WordPress container (`sudo systemctl restart wordpress`) — required for the
    `:Z` SELinux relabel of newly bind-mounted files, an established gotcha from earlier in this

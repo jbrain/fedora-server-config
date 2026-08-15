@@ -1,40 +1,31 @@
 import { positionTransform } from './render.js';
 
-export const TWIST_DURATION_MS = 400; // matches the original engine's default twistDuration
-// Approximates the original engine's TWEEN.Easing.Quartic.Out "settle" feel - fast start,
-// gentle ease into the final aligned position (the "slightly magnetized" snap the owner
-// specifically asked to preserve).
+// A complete twist settles over a fixed 400 ms interval so the cube reads as a physical
+// object rotating through space rather than snapping between states. This easing value is a
+// stable approximation of a smooth quartic-out motion.
+export const TWIST_DURATION_MS = 400;
 export const TWIST_EASING = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
 const ROTATE_FN = { x: 'rotateX', y: 'rotateY', z: 'rotateZ' };
 
-// Checked live (not cached at module-load) since a user can toggle this OS setting while
-// the page is open. There's no continuous idle animation to gate here (verified against
-// the live production cube directly - it has no autorotate at all, see the plan doc's 3e
-// correction) - this only affects the twist-settle sweep itself, which still moves large
-// visual elements over 400ms and is worth skipping for motion-sensitive users.
+// The browser-level motion preference is checked at runtime so the effect can respond to a
+// user or system preference change without needing a reload.
 function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-// Ground-truthed against the browser's own DOMMatrix (see plans/cuber-modernization/README.md):
-// CSS rotateX/rotateZ share the state model's rotation sign convention directly, but
-// rotateY is inverted relative to it. Do not "simplify" this to a single sign without
-// re-verifying - it was wrong the first time this was assumed.
+// The model and the CSS transform system do not share a single sign convention for all axes.
+// The Y-axis is inverted relative to the state model, while X and Z match directly.
 const CSS_SIGN_FOR_AXIS = { x: 1, y: -1, z: 1 };
 
 export function cssSweepDegrees(axis, modelDegrees) {
   return modelDegrees * CSS_SIGN_FOR_AXIS[axis];
 }
 
-// Animates a set of cubelets settling into their final rest position: sweeps a rotation
-// around `axis`, relative to each cubelet's position BEFORE this twist, from `fromDegrees`
-// to `toDegrees` (both in CSS terms, see cssSweepDegrees). `fromDegrees` is 0 for a fresh
-// programmatic twist (shuffle, autorotate), or the live drag-preview's current angle for a
-// user gesture already mid-rotation - passing the actual in-progress angle instead of
-// resetting to 0 first is what avoids the instant "teleport" snap the owner flagged.
-// `cubelets` is the `cubelets` array from Cube#twist()'s return value (pre-twist positions).
-// Resolves once every cubelet has finished settling; does NOT touch the state model.
+// A settle animation sweeps each cubelet from its pre-twist position to the final aligned
+// orientation. The source angle is retained during a drag preview so the object does not
+// jump back to zero before the final settle completes. The state model remains unchanged;
+// this only updates the live DOM transform of the affected cubelets.
 export function animateSettle({ containerElement, axis, cubelets, fromDegrees, toDegrees }) {
   const rotateFn = ROTATE_FN[axis];
   const duration = prefersReducedMotion() ? 0 : TWIST_DURATION_MS;
@@ -49,13 +40,10 @@ export function animateSettle({ containerElement, axis, cubelets, fromDegrees, t
       ],
       { duration, easing: TWIST_EASING },
     );
-    // WAAPI's default fill ('none') means the animation's effect is removed the
-    // instant it finishes, reverting the element to whatever inline style it had
-    // BEFORE the animation started (the live drag-preview's last value) - not the
-    // animation's own end state. Explicitly setting the final style after finishing
-    // is required, not optional; without it, a cancelled/reverted drag left a stale
-    // rotation in place indefinitely - caught by checking computed style after the
-    // animation should have finished, not by eyeballing the screen.
+    // Web Animations uses a fill value of 'none' by default, which removes the effect at the
+    // end of the animation and reveals the pre-animation inline transform. The final state
+    // must therefore be written explicitly so the element remains in the correct settled
+    // orientation after the animation ends.
     return anim.finished
       .catch(() => {}) // a cancelled animation rejects; not an error here
       .then(() => { el.style.transform = `${rotateFn}(${toDegrees}deg) ${base}`; });

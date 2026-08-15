@@ -16,7 +16,7 @@ function snapshotById(cube) {
   return out;
 }
 
-// --- Initial (solved) state must match the ground-truth capture exactly ---
+// --- Initial solved-state invariants ---
 {
   const cube = new Cube();
   const snap = snapshotById(cube);
@@ -25,7 +25,7 @@ function snapshotById(cube) {
   check('initial isSolved()', cube.isSolved() === true);
 }
 
-// --- Full 27-cubelet ground truth for R, U, F (captured live from the original engine) ---
+// --- Full 27-cubelet reference data for R, U, F ---
 const FULL_GROUND_TRUTH = {
   R: {"0":{"address":0,"faces":["white","orange","NA","NA","green","NA"]},"1":{"address":1,"faces":["white","orange","NA","NA","NA","NA"]},"2":{"address":20,"faces":["NA","white","blue","NA","NA","orange"]},"3":{"address":3,"faces":["white","NA","NA","NA","green","NA"]},"4":{"address":4,"faces":["white","NA","NA","NA","NA","NA"]},"5":{"address":11,"faces":["NA","white","blue","NA","NA","NA"]},"6":{"address":6,"faces":["white","NA","NA","red","green","NA"]},"7":{"address":7,"faces":["white","NA","NA","red","NA","NA"]},"8":{"address":2,"faces":["red","white","blue","NA","NA","NA"]},"9":{"address":9,"faces":["NA","orange","NA","NA","green","NA"]},"10":{"address":10,"faces":["NA","orange","NA","NA","NA","NA"]},"11":{"address":23,"faces":["NA","NA","blue","NA","NA","orange"]},"12":{"address":12,"faces":["NA","NA","NA","NA","green","NA"]},"13":{"address":13,"faces":["NA","NA","NA","NA","NA","NA"]},"14":{"address":14,"faces":["NA","NA","blue","NA","NA","NA"]},"15":{"address":15,"faces":["NA","NA","NA","red","green","NA"]},"16":{"address":16,"faces":["NA","NA","NA","red","NA","NA"]},"17":{"address":5,"faces":["red","NA","blue","NA","NA","NA"]},"18":{"address":18,"faces":["NA","orange","NA","NA","green","yellow"]},"19":{"address":19,"faces":["NA","orange","NA","NA","NA","yellow"]},"20":{"address":26,"faces":["NA","NA","blue","yellow","NA","orange"]},"21":{"address":21,"faces":["NA","NA","NA","NA","green","yellow"]},"22":{"address":22,"faces":["NA","NA","NA","NA","NA","yellow"]},"23":{"address":17,"faces":["NA","NA","blue","yellow","NA","NA"]},"24":{"address":24,"faces":["NA","NA","NA","red","green","yellow"]},"25":{"address":25,"faces":["NA","NA","NA","red","NA","yellow"]},"26":{"address":8,"faces":["red","NA","blue","yellow","NA","NA"]}},
   U: {"0":{"address":18,"faces":["NA","orange","NA","NA","white","green"]},"1":{"address":9,"faces":["NA","orange","NA","NA","white","NA"]},"2":{"address":0,"faces":["blue","orange","NA","NA","white","NA"]},"3":{"address":3,"faces":["white","NA","NA","NA","green","NA"]},"4":{"address":4,"faces":["white","NA","NA","NA","NA","NA"]},"5":{"address":5,"faces":["white","NA","blue","NA","NA","NA"]},"6":{"address":6,"faces":["white","NA","NA","red","green","NA"]},"7":{"address":7,"faces":["white","NA","NA","red","NA","NA"]},"8":{"address":8,"faces":["white","NA","blue","red","NA","NA"]},"9":{"address":19,"faces":["NA","orange","NA","NA","NA","green"]},"10":{"address":10,"faces":["NA","orange","NA","NA","NA","NA"]},"11":{"address":1,"faces":["blue","orange","NA","NA","NA","NA"]},"12":{"address":12,"faces":["NA","NA","NA","NA","green","NA"]},"13":{"address":13,"faces":["NA","NA","NA","NA","NA","NA"]},"14":{"address":14,"faces":["NA","NA","blue","NA","NA","NA"]},"15":{"address":15,"faces":["NA","NA","NA","red","green","NA"]},"16":{"address":16,"faces":["NA","NA","NA","red","NA","NA"]},"17":{"address":17,"faces":["NA","NA","blue","red","NA","NA"]},"18":{"address":20,"faces":["NA","orange","yellow","NA","NA","green"]},"19":{"address":11,"faces":["NA","orange","yellow","NA","NA","NA"]},"20":{"address":2,"faces":["blue","orange","yellow","NA","NA","NA"]},"21":{"address":21,"faces":["NA","NA","NA","NA","green","yellow"]},"22":{"address":22,"faces":["NA","NA","NA","NA","NA","yellow"]},"23":{"address":23,"faces":["NA","NA","blue","NA","NA","yellow"]},"24":{"address":24,"faces":["NA","NA","NA","red","green","yellow"]},"25":{"address":25,"faces":["NA","NA","NA","red","NA","yellow"]},"26":{"address":26,"faces":["NA","NA","blue","red","NA","yellow"]}},
@@ -66,8 +66,7 @@ for (const [command, id, expected] of SPOT_CHECKS) {
   check(`twist('${command}') cubelet ${id}`, JSON.stringify(snap[id]) === JSON.stringify(expected));
 }
 
-// --- Whole-cube X/Y/Z (confirmed core to production's drag-to-orbit interaction, not
-// dead code - see plans/cuber-modernization/README.md) ---
+// --- Whole-cube X/Y/Z checks ---
 const WHOLE_CUBE_SPOT_CHECKS = [
   ['X', 0, { address: 18, faces: ['NA', 'white', 'NA', 'NA', 'green', 'orange'] }],
   ['X', 2, { address: 20, faces: ['NA', 'white', 'blue', 'NA', 'NA', 'orange'] }],

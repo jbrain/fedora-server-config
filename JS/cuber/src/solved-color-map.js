@@ -1,12 +1,8 @@
 import { WHITE, ORANGE, BLUE, RED, GREEN, YELLOW } from './color.js';
 
-// Static solved-state sticker layout, one row per cubelet id (0-26), each row
-// [front, up, right, down, left, back] - transcribed exactly from the original
-// engine's hardcoded map and cross-checked against its live ground-truth output
-// (see plans/cuber-modernization/README.md). `undefined` entries become COLORLESS
-// (interior, non-visible faces) in Cubelet's constructor. Written out explicitly
-// (not with array elision like the original) to avoid any ambiguity over which
-// slot is meant to be empty.
+// Static solved-state sticker layout for each cubelet. Each row is ordered as
+// [front, up, right, down, left, back]. Undefined entries represent hidden or interior
+// faces and are converted to COLORLESS during cube construction.
 const W = WHITE, O = ORANGE, B = BLUE, R = RED, G = GREEN, Y = YELLOW, _ = undefined;
 
 export const SOLVED_COLOR_MAP = [

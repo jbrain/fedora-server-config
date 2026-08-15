@@ -1,5 +1,6 @@
-// One of the 6 faces of a cube. Ported conceptually from ERNO.Direction
-// (see plans/cuber-modernization/README.md) with zero 3D-library dependency.
+// The six face directions are represented as fixed objects with a name, a normal vector, and
+// neighbor relationships. This gives the cube a consistent coordinate map without a 3D
+// library dependency.
 export class Direction {
   constructor(id, name, normal) {
     this.id = id;
@@ -9,15 +10,14 @@ export class Direction {
     this.opposite = null;
   }
 
-  // Wires this direction's 4 clockwise neighbors and its opposite face.
-  // Called once, after all 6 singleton instances exist.
+  // Connects the face to its four neighbors and the opposite face.
   setRelationships(up, right, down, left, opposite) {
     this.neighbors = [up, right, down, left];
     this.opposite = opposite;
   }
 
-  // Rotates `from` (one of this direction's 4 neighbors) by `steps` positions
-  // around this direction's neighbor ring; `vector` is +1 clockwise, -1 anticlockwise.
+  // Rotates one neighbor around the face ring by the requested number of steps. The vector
+  // indicates clockwise (+1) or anticlockwise (-1) motion.
   getRotation(vector, from, steps = 1) {
     if (from === undefined) from = this.neighbors[0];
     if (from === this || from === this.opposite) return null;
@@ -69,7 +69,7 @@ export const DOWN = new Direction(3, 'down', { x: 0, y: -1, z: 0 });
 export const LEFT = new Direction(4, 'left', { x: -1, y: 0, z: 0 });
 export const BACK = new Direction(5, 'back', { x: 0, y: 0, z: -1 });
 
-// Exact relationship data transcribed from the upstream source — do not change.
+// The face adjacency graph is fixed and defines the cube's topology.
 FRONT.setRelationships(UP, RIGHT, DOWN, LEFT, BACK);
 UP.setRelationships(BACK, RIGHT, FRONT, LEFT, DOWN);
 RIGHT.setRelationships(UP, BACK, DOWN, FRONT, LEFT);

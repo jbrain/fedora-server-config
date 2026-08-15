@@ -1,5 +1,5 @@
-// A single twist command. Deliberately minimal — no compound twist-string
-// parsing (unused in production; see plans/cuber-modernization/README.md).
+// A single move token. The command is normalized to its axis and to a signed direction for
+// rotation math.
 const AXIS_BY_COMMAND = {
   x: 'x', l: 'x', m: 'x', r: 'x',
   y: 'y', u: 'y', e: 'y', d: 'y',

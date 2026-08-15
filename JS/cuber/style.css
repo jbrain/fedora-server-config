@@ -13,6 +13,11 @@
 	box-sizing: border-box;
 }
 
+html,
+body {
+	touch-action: pan-y pinch-zoom;
+}
+
 body {
 	margin: 0;
 	min-height: 100vh;
@@ -25,6 +30,7 @@ body {
    slightly and pushed further down the page (more top margin) per owner request, below
    the ground-truthed 120px-cubelet size. */
 #the-cube {
+	position: relative;
 	width: 370px;
 	height: 370px;
 	margin: 90px auto 40px;
@@ -67,6 +73,295 @@ body {
 	margin: calc((370px - 304px) / 2) auto;
 	transform-style: preserve-3d;
 	transform: rotateX(-18deg) rotateY(-45deg);
+}
+
+/* Phone layouts need physical non-face space around the projected cube. Scaling the complete
+	DOM geometry preserves every sticker's hit area while creating independent orbit gutters. */
+@media (pointer: coarse) and (max-device-width: 600px) {
+	.cube-group {
+		position: absolute;
+		top: calc(50% - 26px);
+		left: 50%;
+		margin: 0;
+		zoom: 0.7;
+		transform: translate(-50%, -50%) rotateX(-18deg) rotateY(-45deg);
+	}
+}
+
+/* Standards-based narrow viewports need the mount and projected cube reduced together. The
+	legacy theme has no viewport meta tag and therefore continues to use the 370px phone layout. */
+@media (pointer: coarse) and (max-width: 399px) {
+	#the-cube {
+		width: calc(100% - 32px);
+	}
+
+	.cube-group {
+		top: calc(50% - 19px);
+		zoom: 0.65;
+	}
+}
+
+@media (pointer: coarse) and (max-width: 340px) {
+	.cube-group {
+		top: calc(50% - 12px);
+		zoom: 0.6;
+	}
+}
+
+.entropy-study {
+	width: min(620px, calc(100% - 32px));
+	margin: 0 auto 48px;
+	color: #ddd;
+	font-family: Georgia, 'Times New Roman', serif;
+	letter-spacing: 0;
+}
+
+.entropy-study button {
+	min-height: 36px;
+	padding: 7px 12px;
+	border: 1px solid #777;
+	border-radius: 3px;
+	background: #242424;
+	color: #f3f3f3;
+	font: 600 14px/1 Georgia, 'Times New Roman', serif;
+	cursor: pointer;
+}
+
+.entropy-study button:focus-visible {
+	outline: 2px solid #f5b400;
+	outline-offset: 3px;
+}
+
+.entropy-study button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.entropy-study__toggle {
+	display: block;
+	margin: 0 auto;
+}
+
+.entropy-study__panel {
+	margin-top: 18px;
+	padding: 18px 0;
+	border-top: 1px solid #555;
+	border-bottom: 1px solid #555;
+}
+
+.entropy-study__panel[hidden] {
+	display: none;
+}
+
+.entropy-study__heading-row,
+.entropy-study__meter-row,
+.entropy-study__controls {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.entropy-study__heading {
+	margin: 0;
+	font-size: 16px;
+	line-height: 1.2;
+}
+
+.entropy-study__status {
+	color: #f5b400;
+	font-weight: 700;
+}
+
+.entropy-study__controls {
+	justify-content: flex-start;
+	margin: 16px 0 20px;
+}
+
+.entropy-study__meter-row {
+	font-size: 14px;
+}
+
+.entropy-study__meter-row output {
+	font-variant-numeric: tabular-nums;
+	font-weight: 700;
+}
+
+.entropy-study progress {
+	display: block;
+	width: 100%;
+	height: 14px;
+	margin-top: 8px;
+	border: 1px solid #666;
+	border-radius: 2px;
+	background: #202020;
+	appearance: none;
+}
+
+.entropy-study progress::-webkit-progress-bar {
+	background: #202020;
+}
+
+.entropy-study progress::-webkit-progress-value {
+	background: #e87000;
+}
+
+.entropy-study progress::-moz-progress-bar {
+	background: #e87000;
+}
+
+.entropy-study__ticks {
+	display: flex;
+	justify-content: space-between;
+	margin-top: 3px;
+	color: #aaa;
+	font: 11px/1.2 ui-monospace, Consolas, monospace;
+}
+
+.entropy-study__stats {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 1px;
+	margin: 20px 0;
+	background: #555;
+}
+
+.entropy-study__stats div {
+	min-width: 0;
+	padding: 9px;
+	background: #1a1a1a;
+}
+
+.entropy-study dt {
+	color: #aaa;
+	font-size: 12px;
+}
+
+.entropy-study dd {
+	margin: 4px 0 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.entropy-study__crypto {
+	margin: 0;
+}
+
+.entropy-study__crypto div + div {
+	margin-top: 12px;
+}
+
+.entropy-study__crypto output {
+	display: block;
+	margin-top: 4px;
+	color: #fff;
+	font: 12px/1.45 ui-monospace, Consolas, monospace;
+	overflow-wrap: anywhere;
+}
+
+.entropy-study__qualification,
+.entropy-study__local {
+	margin: 16px 0 0;
+	color: #bbb;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.entropy-study__local {
+	margin-top: 6px;
+}
+
+.entropy-study__live {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.entropy-study__dialog {
+	width: min(560px, calc(100% - 32px));
+	max-height: calc(100vh - 48px);
+	padding: 22px;
+	border: 1px solid #777;
+	border-radius: 4px;
+	background: #1a1a1a;
+	color: #ddd;
+	font-family: Georgia, 'Times New Roman', serif;
+	line-height: 1.5;
+	letter-spacing: 0;
+	overflow: auto;
+}
+
+.entropy-study__dialog::backdrop {
+	background: rgba(0, 0, 0, 0.72);
+}
+
+.entropy-study__dialog h3 {
+	margin: 0 0 14px;
+	font-size: 18px;
+}
+
+.entropy-study__dialog p {
+	margin: 0 0 12px;
+}
+
+.entropy-study__dialog .entropy-study__sources {
+	margin-bottom: 4px;
+	font-weight: 700;
+}
+
+.entropy-study__dialog ul {
+	margin: 0 0 18px;
+	padding-left: 22px;
+}
+
+.entropy-study__dialog a {
+	color: #7fb0ff;
+}
+
+.entropy-study__dialog form {
+	margin: 0;
+	text-align: right;
+}
+
+.entropy-study__qr-dialog {
+	text-align: center;
+}
+
+.entropy-study__qr-dialog canvas {
+	display: block;
+	width: min(240px, 100%);
+	height: auto;
+	margin: 16px auto;
+	background: #fff;
+}
+
+.entropy-study__qr-dialog details {
+	margin: 0 0 18px;
+	text-align: left;
+}
+
+.entropy-study__qr-dialog output {
+	display: block;
+	max-height: 8em;
+	overflow: auto;
+	word-break: break-word;
+	font-family: monospace;
+	font-size: 11px;
+}
+
+@media (pointer: coarse) and (max-device-width: 600px) {
+	.entropy-study {
+		width: min(370px, calc(100% - 32px));
+	}
+
+	.entropy-study__stats {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
 }
 
 .cubelet {

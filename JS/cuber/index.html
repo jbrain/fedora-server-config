@@ -7,6 +7,60 @@
 </head>
 <body>
 <div id="the-cube"></div>
-<script type="module" src="./src/main.js"></script>
+<section id="entropy-study" class="entropy-study">
+	<button class="entropy-study__toggle" type="button" aria-expanded="false" aria-controls="entropy-study-panel">Explore entropy</button>
+	<div id="entropy-study-panel" class="entropy-study__panel" aria-labelledby="entropy-study-heading" hidden>
+		<div class="entropy-study__heading-row">
+			<h2 id="entropy-study-heading" class="entropy-study__heading">Interaction unpredictability</h2>
+			<output class="entropy-study__status">Waiting for cube</output>
+		</div>
+		<div class="entropy-study__controls">
+			<button type="button" data-action="start" disabled>Start</button>
+			<button type="button" data-action="reset" disabled>Reset</button>
+			<button type="button" data-action="methodology" aria-haspopup="dialog" aria-controls="entropy-methodology">Methodology</button>
+			<button type="button" data-action="qr" aria-haspopup="dialog" aria-controls="entropy-result-qr" disabled>QR result</button>
+		</div>
+		<div class="entropy-study__meter-row">
+			<label for="entropy-study-meter">Estimated interaction unpredictability</label>
+			<output data-value="score">0.0 demo bits</output>
+		</div>
+		<progress id="entropy-study-meter" max="32" value="0">0 of 32 demo bits</progress>
+		<div class="entropy-study__ticks" aria-hidden="true"><span>0</span><span>8</span><span>16</span><span>24</span><span>32</span></div>
+		<dl class="entropy-study__stats">
+			<div><dt>Moves</dt><dd data-value="moves">0</dd></div>
+			<div><dt>Layer turns</dt><dd data-value="layers">0</dd></div>
+			<div><dt>Orbit context</dt><dd data-value="orbits">0</dd></div>
+			<div><dt>Path novelty</dt><dd data-value="transitions">0 transitions</dd></div>
+		</dl>
+		<dl class="entropy-study__crypto">
+			<div><dt>128-bit browser salt</dt><dd><output data-value="salt">Not started</output></dd></div>
+			<div><dt>Conditioned interaction digest</dt><dd><output data-value="digest">Not started</output></dd></div>
+		</dl>
+		<p class="entropy-study__qualification">Model-based educational heuristic, capped at 32 demo bits. Not NIST-validated entropy and not used as a key.</p>
+		<span class="entropy-study__live" aria-live="polite"></span>
+	</div>
+	<dialog id="entropy-methodology" class="entropy-study__dialog" aria-labelledby="entropy-methodology-heading">
+		<h3 id="entropy-methodology-heading">Methodology</h3>
+		<p>This is a transparent novelty heuristic, not a measurement of cryptographic key strength. Committed layer turns earn limited credit when their directed move, transition, coarse timing bin, or coarse gesture category has not appeared earlier in the session. Repetition stops adding credit; whole-cube rotations provide digest context but add no demo bits.</p>
+		<p>The subtotal is discounted by 50% and capped at 32 demo bits. These are conservative display rules, not a NIST entropy-source validation. A fresh 128-bit public salt and the normalized move transcript are processed locally with SHA-256 through the browser Web Crypto API. No interaction data is stored or uploaded.</p>
+		<p class="entropy-study__sources">Supporting references:</p>
+		<ul>
+			<li><a href="https://doi.org/10.6028/NIST.SP.800-90B">NIST SP 800-90B: Entropy Sources</a></li>
+			<li><a href="https://www.rfc-editor.org/rfc/rfc4086">RFC 4086: Randomness Requirements for Security</a></li>
+			<li><a href="https://www.w3.org/TR/WebCryptoAPI/">W3C Web Cryptography API</a></li>
+		</ul>
+		<form method="dialog"><button type="submit">Close</button></form>
+	</dialog>
+	<dialog id="entropy-result-qr" class="entropy-study__dialog entropy-study__qr-dialog" aria-labelledby="entropy-result-qr-heading">
+		<h4 id="entropy-result-qr-heading">Entropy result QR</h4>
+		<canvas data-qr-canvas width="240" height="240" role="img" aria-label="QR code containing the entropy session result"></canvas>
+		<details>
+			<summary>Encoded result</summary>
+			<output data-qr-payload></output>
+		</details>
+		<form method="dialog"><button type="submit">Close</button></form>
+	</dialog>
+</section>
+<script type="module" src="./dist/main.js"></script>
 </body>
 </html>

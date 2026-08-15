@@ -2,11 +2,13 @@
   "name": "cuber",
   "private": true,
   "type": "module",
-  "description": "Build tooling only - the actual app is plain dependency-free ES modules (src/). Bundles + minifies for deployment; source with comments always stays in src/.",
+  "description": "Build tooling only - the actual app is plain ES modules (src/) with the QR encoder bundled locally for deployment. Source with comments stays in src/.",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --minify --outfile=dist/main.js && esbuild style.css --minify --outfile=dist/style.css"
+    "build": "esbuild src/main.js --bundle --minify --outfile=dist/main.js && esbuild style.css --minify --outfile=dist/style.css",
+    "test": "node src/cube.test.mjs && node src/interaction-record.test.mjs && node src/entropy-estimator.test.mjs && node src/transcript-digest.test.mjs && node src/entropy-session.test.mjs"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "qrcode": "^1.5.4"
   }
 }
