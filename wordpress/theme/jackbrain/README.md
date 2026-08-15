@@ -24,8 +24,8 @@ untouched), `js/particles/` (dead/orphaned, not enqueued)) remains live-server-o
 this repo's existing convention for the theme as a whole.
 
 The entropy-enabled `jbAbout.php` + cube bundle release was deployed and verified on 2026-08-15.
-The current synchronized QR-enabled release backup timestamp is `20260815-152338`; the earlier
-Methodology release backup remains available under `20260815-142528`.
+The current synchronized reduced-Methodology release backup timestamp is `20260815-153057`; the
+earlier QR-enabled release backup remains available under `20260815-152338`.
 
 The QR result control is part of the entropy template and requires the matching generated cube
 bundle. It is an opt-in local export of the displayed result; scanning it shares the encoded salt,

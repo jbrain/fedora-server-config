@@ -65,10 +65,9 @@ SHA-256 digest chain over normalized committed moves. All study state is volatil
 inside the active page: there is no upload, browser storage, cookie, or analytics event. Reset or
 navigation discards the session.
 
-The adjacent `Methodology` control opens a native keyboard-accessible dialog summarizing the
-novelty rules, 50% discount, 32-bit display cap, Web Crypto processing, privacy boundary, and
+The adjacent `Methodology` control opens a native keyboard-accessible dialog containing the
 primary NIST, IETF, and W3C references. Escape and the Close button dismiss it and restore focus
-to the control.
+to the control; the detailed model remains documented in this README and the entropy plan.
 
 After a result exists, `QR result` opens a local canvas-generated QR code containing a versioned
 JSON payload with the displayed score, session counts, public salt, and conditioned digest. The
