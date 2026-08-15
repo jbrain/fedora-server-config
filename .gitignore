@@ -11,6 +11,9 @@ vendor/
 JS/cuber/node_modules/
 JS/cuber/dist/
 
+# Clean export for the separate public cube repository
+public/cuber-entropy/
+
 # Editor / OS noise
 .DS_Store
 Thumbs.db

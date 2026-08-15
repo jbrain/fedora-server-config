@@ -135,7 +135,7 @@ function jackbrain_scripts() {
     );
     wp_add_inline_script(
         'jbrain',
-        '(function(){function addRecaptchaAttribution(){if(!document.body||document.querySelector(".recaptcha-attribution"))return;const p=document.createElement("p");p.className="recaptcha-attribution";p.append("This site is protected by reCAPTCHA and the Google ");const privacy=document.createElement("a");privacy.href="https://policies.google.com/privacy";privacy.textContent="Privacy Policy";p.append(privacy," and ");const terms=document.createElement("a");terms.href="https://policies.google.com/terms";terms.textContent="Terms of Service";p.append(terms," apply.");document.body.append(p)}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",addRecaptchaAttribution)}else{addRecaptchaAttribution()}})();',
+        '(function(){function addRecaptchaAttribution(){if(!document.body||document.querySelector(".recaptcha-attribution"))return;const p=document.createElement("p");p.className="recaptcha-attribution";p.append("This site is protected by reCAPTCHA and the Google ");const privacy=document.createElement("a");privacy.href="https://policies.google.com/privacy";privacy.textContent="Privacy Policy";p.append(privacy," and ");const terms=document.createElement("a");terms.href="https://policies.google.com/terms";terms.textContent="Terms of Service";p.append(terms," apply.");(document.getElementById("footer")||document.getElementById("wrapper")||document.body).append(p)}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",addRecaptchaAttribution)}else{addRecaptchaAttribution()}})();',
         'after'
     );
 
