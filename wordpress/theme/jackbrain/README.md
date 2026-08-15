@@ -37,9 +37,11 @@ attribution with links to Google's Privacy Policy and Terms of Service. The them
 enqueues a second global reCAPTCHA script of its own.
 
 The reusable cube and entropy project is published separately at
-https://github.com/jbrain/cuber-entropy under the MIT License. This private adapter owns the
-WordPress markup and deployment; it consumes pinned generated assets rather than loading source
-from GitHub at runtime. Public release tags and deployed asset hashes belong in the entropy plan.
+https://github.com/jbrain/cuber-entropy under the MIT License. Its source URL is retained as an
+HTML comment adjacent to the entropy section rather than displayed as a prominent About-page
+link. This private adapter owns the WordPress markup and deployment; it consumes pinned generated
+assets rather than loading source from GitHub at runtime. Public release tags and deployed asset
+hashes belong in the entropy plan.
 
 ## Deployment (manual — same pattern as every other component in this repo)
 

@@ -76,7 +76,7 @@
                 <form method="dialog"><button type="submit">Close</button></form>
             </dialog>
         </section>
-        <p class="cuber-project-link"><a href="https://github.com/jbrain/cuber-entropy">Cuber Interaction Entropy on GitHub</a></p>
+        <!-- Project source: https://github.com/jbrain/cuber-entropy -->
         <?php // Turn off the clock: <div id="the-clock"></div> ?>
 
         <div id="nav-below" class="navigation">
