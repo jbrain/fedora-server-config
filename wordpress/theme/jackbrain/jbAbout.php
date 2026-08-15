@@ -51,6 +51,7 @@
                 </dl>
                 <p class="entropy-study__qualification">Model-based educational heuristic, capped at 32 demo bits. Not NIST-validated entropy and not used as a key.</p>
                 <p class="entropy-study__local">Processed locally in this page. Reset or navigation clears the session.</p>
+                <p class="entropy-study__project" style="margin: 0.6em 0 0; font-size: 0.82em;"><a href="https://github.com/jbrain/cuber-entropy">Project source: Cuber Interaction Entropy</a></p>
                 <span class="entropy-study__live" aria-live="polite"></span>
             </div>
             <dialog id="entropy-methodology" class="entropy-study__dialog" aria-labelledby="entropy-methodology-heading">
@@ -76,7 +77,6 @@
                 <form method="dialog"><button type="submit">Close</button></form>
             </dialog>
         </section>
-        <!-- Project source: https://github.com/jbrain/cuber-entropy -->
         <?php // Turn off the clock: <div id="the-clock"></div> ?>
 
         <div id="nav-below" class="navigation">

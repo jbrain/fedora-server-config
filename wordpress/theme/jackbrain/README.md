@@ -36,16 +36,21 @@ Google's permitted `visibility: hidden` treatment. Every page receives visible r
 attribution with links to Google's Privacy Policy and Terms of Service. The theme no longer
 enqueues a second global reCAPTCHA script of its own.
 
+The legacy `header.php` also contains a conditional reCAPTCHA API tag because the old theme had
+hard-coded the script globally. It now emits that tag only when the current post contains a real
+Contact Form 7 shortcode; this prevents About and other non-form pages from loading Google at all.
+
 The attribution is inserted into `#footer`, or `#wrapper` for legacy templates that omit the
 footer, with `clear: both`, full-width block styling. This keeps it at the bottom of the page when
 the About page's entropy panel is expanded.
 
 The reusable cube and entropy project is published separately at
-https://github.com/jbrain/cuber-entropy under the MIT License. Its source URL is retained as an
-HTML comment adjacent to the entropy section rather than displayed as a prominent About-page
-link. This private adapter owns the WordPress markup and deployment; it consumes pinned generated
-assets rather than loading source from GitHub at runtime. Public release tags and deployed asset
-hashes belong in the entropy plan.
+https://github.com/jbrain/cuber-entropy under the MIT License. The source link appears only inside
+the enabled entropy panel, beside the local-processing note, with a compact readable treatment;
+the base About page remains free of
+the link. This private adapter owns the WordPress markup and deployment; it consumes pinned
+generated assets rather than loading source from GitHub at runtime. Public release tags and
+deployed asset hashes belong in the entropy plan.
 
 ## Deployment (manual — same pattern as every other component in this repo)
 

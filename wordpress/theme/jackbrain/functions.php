@@ -105,13 +105,22 @@ add_action('widgets_init', 'jackbrain_widgets_init');
 /**
  * Enqueue scripts and styles
  */
+function jackbrain_page_has_contact_form() {
+    global $post;
+
+    return is_singular() && $post instanceof WP_Post
+        && has_shortcode($post->post_content, 'contact-form-7');
+}
+
 function jackbrain_scripts() {
     // this themes CSS
     wp_enqueue_style('jackbrain', get_stylesheet_uri(), array(), null);
-    wp_add_inline_style(
-        'jackbrain',
-        '.grecaptcha-badge { visibility: hidden; } .recaptcha-attribution { clear: both; display: block; width: 100%; margin: 1em 0; font-size: 0.75em; text-align: center; }'
-    );
+    if (jackbrain_page_has_contact_form()) {
+        wp_add_inline_style(
+            'jackbrain',
+            '.grecaptcha-badge { visibility: hidden; } .recaptcha-attribution { clear: both; display: block; width: 100%; margin: 1em 0; font-size: 0.75em; text-align: center; }'
+        );
+    }
 
     // load the google fonts
     wp_enqueue_style('google-fonts', 'https://fonts.googleapis.com/css?family=Courgette|Chango|Jura:500', array(), null);
@@ -133,11 +142,13 @@ function jackbrain_scripts() {
     wp_enqueue_script(
             'jbrain', get_template_directory_uri() . '/js/jbrain.js', array('extra_libs'), null
     );
-    wp_add_inline_script(
-        'jbrain',
-        '(function(){function addRecaptchaAttribution(){if(!document.body||document.querySelector(".recaptcha-attribution"))return;const p=document.createElement("p");p.className="recaptcha-attribution";p.append("This site is protected by reCAPTCHA and the Google ");const privacy=document.createElement("a");privacy.href="https://policies.google.com/privacy";privacy.textContent="Privacy Policy";p.append(privacy," and ");const terms=document.createElement("a");terms.href="https://policies.google.com/terms";terms.textContent="Terms of Service";p.append(terms," apply.");(document.getElementById("footer")||document.getElementById("wrapper")||document.body).append(p)}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",addRecaptchaAttribution)}else{addRecaptchaAttribution()}})();',
-        'after'
-    );
+    if (jackbrain_page_has_contact_form()) {
+        wp_add_inline_script(
+            'jbrain',
+            '(function(){function addRecaptchaAttribution(){if(!document.body||document.querySelector(".recaptcha-attribution"))return;const p=document.createElement("p");p.className="recaptcha-attribution";p.append("This site is protected by reCAPTCHA and the Google ");const privacy=document.createElement("a");privacy.href="https://policies.google.com/privacy";privacy.textContent="Privacy Policy";p.append(privacy," and ");const terms=document.createElement("a");terms.href="https://policies.google.com/terms";terms.textContent="Terms of Service";p.append(terms," apply.");(document.getElementById("footer")||document.getElementById("wrapper")||document.body).append(p)}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",addRecaptchaAttribution)}else{addRecaptchaAttribution()}})();',
+            'after'
+        );
+    }
 
     // the rotating cube (about page only) - Segment 3 rewrite: plain ES modules,
     // bundled + minified for production via esbuild (JS/cuber/package.json's
@@ -186,6 +197,45 @@ function jackbrain_scripts() {
 
     
 }
+
+function jackbrain_disable_recaptcha_without_form() {
+    if (!jackbrain_page_has_contact_form()) {
+        wp_dequeue_script('google-recaptcha');
+        wp_dequeue_script('wpcf7-recaptcha');
+        wp_deregister_script('google-recaptcha');
+        wp_deregister_script('wpcf7-recaptcha');
+    }
+}
+
+function jackbrain_remove_recaptcha_enqueue_without_form() {
+    if (!jackbrain_page_has_contact_form()) {
+        remove_action('wp_enqueue_scripts', 'wpcf7_recaptcha_enqueue_scripts', 20);
+    }
+}
+
+function jackbrain_filter_recaptcha_script($tag, $handle) {
+    if (!jackbrain_page_has_contact_form()
+        && in_array($handle, array('google-recaptcha', 'wpcf7-recaptcha'), true)) {
+        return '';
+    }
+
+    return $tag;
+}
+
+function jackbrain_filter_recaptcha_script_handles($handles) {
+    if (!jackbrain_page_has_contact_form()) {
+        $handles = array_diff($handles, array('google-recaptcha', 'wpcf7-recaptcha'));
+    }
+
+    return $handles;
+}
+
+add_action('wp_enqueue_scripts', 'jackbrain_disable_recaptcha_without_form', 100);
+add_action('wp_enqueue_scripts', 'jackbrain_remove_recaptcha_enqueue_without_form', 1);
+add_action('wp_print_scripts', 'jackbrain_disable_recaptcha_without_form', 100);
+add_action('wp_print_footer_scripts', 'jackbrain_disable_recaptcha_without_form', 100);
+add_filter('wp_print_scripts_array', 'jackbrain_filter_recaptcha_script_handles', 100);
+add_filter('script_loader_tag', 'jackbrain_filter_recaptcha_script', 10, 2);
 
 add_action('wp_enqueue_scripts', 'jackbrain_scripts');
 
