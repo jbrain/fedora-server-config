@@ -31,6 +31,11 @@ The QR result control is part of the entropy template and requires the matching 
 bundle. It is an opt-in local export of the displayed result; scanning it shares the encoded salt,
 digest, and summary counters.
 
+Contact Form 7's reCAPTCHA v3 integration remains active, but the Google badge is hidden using
+Google's permitted `visibility: hidden` treatment. Every page receives visible reCAPTCHA
+attribution with links to Google's Privacy Policy and Terms of Service. The theme no longer
+enqueues a second global reCAPTCHA script of its own.
+
 ## Deployment (manual — same pattern as every other component in this repo)
 
 The cube is a separately built theme feature. Changes under `JS/cuber/src/` or

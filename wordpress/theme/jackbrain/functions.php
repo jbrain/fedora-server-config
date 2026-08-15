@@ -108,6 +108,10 @@ add_action('widgets_init', 'jackbrain_widgets_init');
 function jackbrain_scripts() {
     // this themes CSS
     wp_enqueue_style('jackbrain', get_stylesheet_uri(), array(), null);
+    wp_add_inline_style(
+        'jackbrain',
+        '.grecaptcha-badge { visibility: hidden; } .recaptcha-attribution { margin: 1em; font-size: 0.75em; text-align: center; }'
+    );
 
     // load the google fonts
     wp_enqueue_style('google-fonts', 'https://fonts.googleapis.com/css?family=Courgette|Chango|Jura:500', array(), null);
@@ -129,10 +133,10 @@ function jackbrain_scripts() {
     wp_enqueue_script(
             'jbrain', get_template_directory_uri() . '/js/jbrain.js', array('extra_libs'), null
     );
-
-    // the recaptcha - contact-form-7 should be doing this?
-    wp_enqueue_script(
-            'recaptcha', 'https://www.google.com/recaptcha/api.js', array(), null
+    wp_add_inline_script(
+        'jbrain',
+        '(function(){function addRecaptchaAttribution(){if(!document.body||document.querySelector(".recaptcha-attribution"))return;const p=document.createElement("p");p.className="recaptcha-attribution";p.append("This site is protected by reCAPTCHA and the Google ");const privacy=document.createElement("a");privacy.href="https://policies.google.com/privacy";privacy.textContent="Privacy Policy";p.append(privacy," and ");const terms=document.createElement("a");terms.href="https://policies.google.com/terms";terms.textContent="Terms of Service";p.append(terms," apply.");document.body.append(p)}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",addRecaptchaAttribution)}else{addRecaptchaAttribution()}})();',
+        'after'
     );
 
     // the rotating cube (about page only) - Segment 3 rewrite: plain ES modules,
@@ -182,6 +186,7 @@ function jackbrain_scripts() {
 
     
 }
+
 add_action('wp_enqueue_scripts', 'jackbrain_scripts');
 
 // Nav fallback
