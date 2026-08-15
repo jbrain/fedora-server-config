@@ -24,8 +24,8 @@ untouched), `js/particles/` (dead/orphaned, not enqueued)) remains live-server-o
 this repo's existing convention for the theme as a whole.
 
 The entropy-enabled `jbAbout.php` + cube bundle release was deployed and verified on 2026-08-15.
-The current synchronized restored-Methodology release backup timestamp is `20260815-154349`; the
-earlier reduced-dialog release backup remains available under `20260815-153057`.
+The current synchronized theme backup timestamp is `20260815-163604`; the restored-Methodology
+release backup remains available under `20260815-154349`.
 
 The QR result control is part of the entropy template and requires the matching generated cube
 bundle. It is an opt-in local export of the displayed result; scanning it shares the encoded salt,
@@ -35,6 +35,10 @@ Contact Form 7's reCAPTCHA v3 integration remains active, but the Google badge i
 Google's permitted `visibility: hidden` treatment. Every page receives visible reCAPTCHA
 attribution with links to Google's Privacy Policy and Terms of Service. The theme no longer
 enqueues a second global reCAPTCHA script of its own.
+
+The attribution is inserted into `#footer`, or `#wrapper` for legacy templates that omit the
+footer, with `clear: both`, full-width block styling. This keeps it at the bottom of the page when
+the About page's entropy panel is expanded.
 
 The reusable cube and entropy project is published separately at
 https://github.com/jbrain/cuber-entropy under the MIT License. Its source URL is retained as an

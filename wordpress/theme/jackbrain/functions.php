@@ -110,7 +110,7 @@ function jackbrain_scripts() {
     wp_enqueue_style('jackbrain', get_stylesheet_uri(), array(), null);
     wp_add_inline_style(
         'jackbrain',
-        '.grecaptcha-badge { visibility: hidden; } .recaptcha-attribution { margin: 1em; font-size: 0.75em; text-align: center; }'
+        '.grecaptcha-badge { visibility: hidden; } .recaptcha-attribution { clear: both; display: block; width: 100%; margin: 1em 0; font-size: 0.75em; text-align: center; }'
     );
 
     // load the google fonts
