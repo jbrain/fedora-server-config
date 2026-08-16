@@ -21,6 +21,10 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    # Blocks a compromised process from re-acquiring privileges beyond what it
+    # started with (e.g. via setuid binaries) - added 2026-08-16 security audit.
+    security_opt:
+      - no-new-privileges:true
     volumes:
       # Only wp-content is bind-mounted — core WordPress files are managed by the image
       # (recommended upstream pattern). SELinux :Z since this dir is exclusive to this container.
@@ -30,6 +34,11 @@ services:
       # the `/dev/log` symlink itself — this host's `/dev/log -> /run/systemd/journal/dev-log`.
       - /run/systemd/journal/dev-log:/dev/log
       - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro,Z
+      # PHP-FPM/PHP hardening (2026-08-16 security audit) - see each file's own
+      # header comment for what it fixes and why (loopback-only FPM listener,
+      # worker recycling, hidden PHP version, disabled shell/process functions).
+      - ./php-fpm-hardening.conf:/usr/local/etc/php-fpm.d/zzz-hardening.conf:ro,Z
+      - ./php-hardening.ini:/usr/local/etc/php/conf.d/zzz-hardening.ini:ro,Z
       # Jackson Brain Ampache Integration plugin: the API key must never be an env var
       # (visible via `podman inspect`), so it's a bind-mounted secret file instead. Create
       # ./secrets/jba-ampache-api-key on the host (600, not committed - see

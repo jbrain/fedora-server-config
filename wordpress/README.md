@@ -42,6 +42,35 @@ https://jackson-brain.com/wordpress` (genuinely different values).
 
 ## Image choice
 
+### Post-cutover security audit + hardening (2026-08-16)
+
+A full audit of the new Nginx/FPM architecture, done immediately after the cutover above, found
+and fixed one critical and several lower-severity issues — all verified fixed, live:
+
+- **Critical**: PHP-FPM's effective config was `listen = 9000` (all interfaces, inherited from
+  the base image's own `docker.conf`, meant for the separate-container nginx+fpm pattern — wrong
+  here since nginx and php-fpm run in the same container). Verified exploitable: another
+  container on the same `db-backend` Podman network could connect directly to port 9000, raw
+  FastCGI has no access control of its own, so this bypassed every nginx-layer protection
+  (uploads PHP-execution denial, `xmlrpc.php` block). Fixed by `php-fpm-hardening.conf`
+  (bind-mounted, restricts to `127.0.0.1:9000`) — re-verified the same cross-container connection
+  now fails.
+- **Medium**: `X-Powered-By: PHP/8.4.24` leaked on every public response. Fixed via
+  `php-hardening.ini` (`expose_php = Off`, plus `disable_functions` for shell/process execution
+  functions this site never needs — deliberately excludes `curl_exec`, which WordPress's own HTTP
+  API depends on).
+- **Low**: the container's own nginx leaked its exact version when hit directly. Fixed via
+  `server_tokens off;` in `nginx-fpm.conf`.
+- Added `security_opt: no-new-privileges:true`.
+- Reviewed and already correct: read-only root filesystem, minimal container capabilities, nginx
+  workers run as `nobody`/php-fpm workers as `www-data` (not root), `WP_DEBUG` off, TLS/HSTS/
+  security headers, secrets via bind-mounted file not env var.
+
+See repo memory for the full audit detail. Considered and rejected switching to Docker Hardened
+Images / Chainguard's WordPress images instead — both require a paid subscription to pull, and
+DHI's WordPress image is PHP-FPM-only anyway (still needs a separate nginx front-end), so it
+wouldn't remove any of this integration work, just add a licensing dependency.
+
 ### WordPress 7 cutover — LIVE (2026-08-16)
 
 Production is now `localhost/wordpress:7.0.4-php8.4-fpm-nginx` (WordPress 7.0.4 core, official
