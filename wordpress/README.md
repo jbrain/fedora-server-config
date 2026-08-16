@@ -81,6 +81,23 @@ Required staging gates before changing `docker-compose.yml`:
 - Only after staging passes should the production image change be deployed with a backup,
   rollback target, and post-restart HTTP/service/hash checks.
 
+### Direct cutover attempt and rollback (2026-08-16)
+
+The owner-approved direct cutover was attempted after the image and configuration checks. Backups
+were created at `/storage/backups/wordpress-wp7-20260816-081358`, but the first container returned
+`403/404` because its entrypoint bypassed official WordPress initialization. The compose rollback
+completed automatically and restored the production image; home and About returned `200`.
+
+A second guarded attempt reached the Nginx/FPM container but returned `502` through the host proxy
+and was also rolled back. Production is currently confirmed on
+`localhost/wordpress:6.9.6-php8.4-apache`.
+
+The staging entrypoint was corrected to invoke the official WordPress entrypoint before starting
+PHP-FPM. An isolated read-only runtime then confirmed core initialization, Nginx/FPM processes,
+Apache absence, and successful Nginx/PHP-FPM config tests. The remaining blocker is application-
+level HTTP routing under the real production database/wp-content configuration; no further
+production cutover should occur until that 502 is reproduced and fixed in staging.
+
 The tracked classic-theme compatibility pass is intentionally independent of the image switch:
 `functions.php` now declares `title-tag` and HTML5 support and guards the Contact Form 7 constant;
 `header.php` uses an HTML5 document shell, viewport metadata, and `wp_body_open()`, while WordPress

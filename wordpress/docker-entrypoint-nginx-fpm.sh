@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-/usr/local/bin/docker-entrypoint.sh true
-php-fpm --nodaemonize &
+mkdir -p /tmp/nginx/client_body /tmp/nginx/fastcgi /tmp/nginx/proxy /tmp/nginx/uwsgi /tmp/nginx/scgi
+/usr/local/bin/docker-entrypoint.sh php-fpm --nodaemonize &
 fpm_pid=$!
 nginx -g 'daemon off;' &
 nginx_pid=$!
