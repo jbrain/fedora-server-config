@@ -313,7 +313,9 @@ function jackbrain_comment($comment, $args, $depth) {
         return 'Jackson Fielding Brain';
     }
 
-    add_filter('login_headertitle', 'my_login_logo_url_title');
+    // WP 7.0.4 compat: 'login_headertitle' was deprecated in WP 5.2.0 in favor of
+    // 'login_headertext' (verified against this image's own wp-login.php).
+    add_filter('login_headertext', 'my_login_logo_url_title');
     // end change links
 
     /**

@@ -25,12 +25,33 @@ The WordPress 7 compatibility pass also keeps this classic theme on core-managed
 HTML5 theme support, an HTML5 doctype/viewport, and the `wp_body_open()` hook. The former custom
 `wp_title` filter is removed; these changes are independent of the pending container image upgrade.
 
+**Mobile regression from the viewport-meta addition, fixed 2026-08-16**: adding
+`<meta name="viewport" content="width=device-width, initial-scale=1">` to `header.php` (above)
+made phones render this fixed-780px-wide, pre-responsive-era design at the ACTUAL device width
+instead of the old default zoomed-out "virtual viewport" (~980px) mobile browsers use when no
+viewport meta is present. `#home-container` (the melting-cube background image's container, in
+`jbHome.php`) had no width constraint of its own — unlike its child `#content`, which is a fixed
+`780px` — so it stretched to the full (narrow) device width, making the background image's
+percentage-based position (`90% 95%`) compute against a much smaller box and appear oversized/
+off-center. Fixed in `style.css` (untracked, live-server-only) by capping `#home-container` to the
+same `780px` + auto horizontal margins as `#content`, restoring a consistent design canvas
+regardless of viewport width — verified visually at a 390px mobile viewport width post-fix.
+
+Also fixed as part of the same WP7-compatibility review: `functions.php`'s `login_headertitle`
+filter (deprecated by WordPress since 5.2.0) renamed to `login_headertext` (verified against this
+image's own `wp-login.php` deprecation shim — cosmetic-only, no functional change, silences a
+`_deprecated_hook()` notice that would otherwise appear if `WP_DEBUG` were ever enabled here).
+
 The rest of the theme (`style.css`, other template files, `images/`, `js/libs.js` (Raphael, vendored,
 untouched), `js/particles/` (dead/orphaned, not enqueued)) remains live-server-only, matching
 this repo's existing convention for the theme as a whole.
 
 The entropy-enabled `jbAbout.php` + cube bundle release was deployed and verified on 2026-08-15.
-The current synchronized theme backup timestamp is `20260816-074110`; the prior layout backup
+The current synchronized theme backup timestamp is `20260816-091859` (`functions.php`) /
+`20260816-091906` (`style.css`); rollback copies now live under
+`/storage/backups/wordpress-theme-jackbrain-bak/` on the server, not in the live theme directory
+itself (moved 2026-08-16 — theme webroots must never carry rollback copies, even ones already
+blocked from web access by nginx's `.bak` regex). The prior layout backup
 remains available under `20260815-163604`.
 
 The QR result control is part of the entropy template and requires the matching generated cube
