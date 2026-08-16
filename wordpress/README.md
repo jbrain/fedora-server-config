@@ -66,6 +66,12 @@ Required staging gates before changing `docker-compose.yml`:
 - Only after staging passes should the production image change be deployed with a backup,
   rollback target, and post-restart HTTP/service/hash checks.
 
+The tracked classic-theme compatibility pass is intentionally independent of the image switch:
+`functions.php` now declares `title-tag` and HTML5 support and guards the Contact Form 7 constant;
+`header.php` uses an HTML5 document shell, viewport metadata, and `wp_body_open()`, while WordPress
+core owns the document title. These changes are safe to deploy against the current 6.9.6 baseline,
+but the official 7.0.4 image still requires the staging gates above.
+
 **Current image: `localhost/wordpress:6.9.6-php8.4-apache`** — a locally custom-built image (see
 `Dockerfile`), not an official Docker Hub tag. WordPress 6.9.4 (the original containerization
 target, matching what was already running) was found to be **insecure** per WordPress's own

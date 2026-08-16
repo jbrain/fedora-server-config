@@ -3,17 +3,12 @@
  * @package JackBrain
  */
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<!--[if IE 8]>
-<html id="ie8" <?php language_attributes(); ?>>
-<![endif]-->
-<!--[if !(IE 8) ]><!-->
-<html xmlns="http://www.w3.org/1999/xhtml" <?php language_attributes(); ?>>
-    <!--<![endif]-->
-    <head profile="http://gmpg.org/xfn/11">
-        <meta http-equiv="Content-Type" content="<?php bloginfo('html_type'); ?>; charset=<?php bloginfo('charset'); ?>" />
+<!doctype html>
+<html <?php language_attributes(); ?>>
+    <head>
+        <meta charset="<?php bloginfo('charset'); ?>" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="google-site-verification" content="C4705HFnPrJ6vMMcpEPOgOrp68m6Z2ChDX8qLPIK5xQ" />
-        <title><?php wp_title('|', true, 'right'); ?></title>
         <link rel="pingback" href="<?php bloginfo('pingback_url'); ?>" />
         <?php wp_head(); ?>
 
@@ -39,6 +34,7 @@
     </head>
 
     <body <?php body_class(); ?>>
+        <?php wp_body_open(); ?>
 
         <div id="wrapper">
             <div id="header">

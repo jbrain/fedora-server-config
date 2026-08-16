@@ -21,6 +21,10 @@ and, as of 2026-08-14, a jQuery-free rewrite) that must not be silently lost or 
 - **`header.php`**: contains the legacy theme head markup and conditionally loads Contact Form 7's
   reCAPTCHA API only on pages containing an actual contact form.
 
+The WordPress 7 compatibility pass also keeps this classic theme on core-managed document titles,
+HTML5 theme support, an HTML5 doctype/viewport, and the `wp_body_open()` hook. The former custom
+`wp_title` filter is removed; these changes are independent of the pending container image upgrade.
+
 The rest of the theme (`style.css`, other template files, `images/`, `js/libs.js` (Raphael, vendored,
 untouched), `js/particles/` (dead/orphaned, not enqueued)) remains live-server-only, matching
 this repo's existing convention for the theme as a whole.
