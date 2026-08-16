@@ -1,0 +1,13 @@
+FROM docker.io/library/wordpress@sha256:39ba732a08cc1078889df0052c18a721bf400191689d15b01bcc1c7ed265e840
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nginx \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /etc/nginx/sites-enabled/default
+
+COPY nginx-fpm.conf /etc/nginx/nginx.conf
+COPY docker-entrypoint-nginx-fpm.sh /usr/local/bin/docker-entrypoint-nginx-fpm.sh
+RUN chmod 0755 /usr/local/bin/docker-entrypoint-nginx-fpm.sh
+
+EXPOSE 80
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint-nginx-fpm.sh"]

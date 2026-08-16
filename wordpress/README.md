@@ -53,6 +53,12 @@ The official FPM image was pulled and validated rootfully on the host: WordPress
 also validated, but is rejected for this architecture because it runs Apache inside the
 WordPress container.
 
+The first isolated custom image build also passed: `localhost/wordpress:7.0.4-php8.4-fpm-nginx-stage`
+built successfully from the pinned FPM digest; container-side `nginx -t`, `php-fpm -t`, and the
+no-Apache check passed. A localhost-only runtime smoke test confirmed both Nginx and PHP-FPM
+processes start in the container. The temporary container was removed after the test. No
+production image or database was changed.
+
 This confirms that the upgrade can move back to an official FPM image and remove the custom
 core-swap Dockerfile, but production has **not** been upgraded yet. The current custom `6.9.6`
 Apache image remains
