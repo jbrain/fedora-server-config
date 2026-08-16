@@ -81,6 +81,48 @@ deployed asset hashes belong in the entropy plan.
 
 ## Deployment (manual — same pattern as every other component in this repo)
 
+### General theme file edits — `deploy-theme.ps1`
+
+For any plain theme file edit (`style.css`, `functions.php`, `header.php`, other page templates,
+images, etc. — anything that's just a file copy, not the separately-built cube engine below), use
+`deploy-theme.ps1` (PowerShell, run from a machine with your own SSH key/agent already set up for
+the `linus` host alias — same as every other manual deploy in this repo, no special credentials
+needed):
+
+```powershell
+cd wordpress\theme\jackbrain
+
+# Deploy every file currently in this local folder (only files that exist here are touched -
+# most of the live theme is untracked and stays server-only, see above):
+.\deploy-theme.ps1
+
+# Deploy just one or two specific files:
+.\deploy-theme.ps1 -Path style.css
+.\deploy-theme.ps1 -Path functions.php,js\jbrain.js
+
+# See what would be deployed without touching anything:
+.\deploy-theme.ps1 -DryRun
+```
+
+It stages the selected file(s) locally, uploads them via `scp`, then runs
+`deploy-theme-remote.sh` on the server (via `ssh -t ... sudo bash ...` — you'll be prompted for
+your own sudo password directly in the terminal) to: back up any existing live file to
+`/storage/backups/wordpress-theme-jackbrain-bak/` with a timestamp, copy the new file into place
+with ownership/permissions matching the theme directory, restart the `wordpress` container (
+required — the wp-content bind mount uses SELinux `:Z`, which only relabels to match the
+container's current MCS category on a fresh start; files written while it keeps running can
+otherwise become unreadable — see repo memory's "SELinux MCS mismatch" note), and finally curl
+the homepage and About page to confirm both still return `200`. If verification fails, the script
+exits non-zero and prints where the pre-deploy backups are for a manual rollback — see both
+scripts' own header comments for the exact behavior.
+
+If you edit an UNTRACKED file (e.g. `style.css`) directly on the live server instead (the older,
+still-valid pattern used throughout this repo's history), it does **not** exist locally to deploy
+from — pull it back into this folder afterward if you want future edits to go through
+`deploy-theme.ps1` instead of ad hoc SSH edits.
+
+### Cube engine (`JS/cuber/`) — separate build step
+
 The cube is a separately built theme feature. Changes under `JS/cuber/src/` or
 `JS/cuber/style.css` must be tested and bundled before touching the live theme:
 
