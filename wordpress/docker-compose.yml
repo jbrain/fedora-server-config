@@ -1,23 +1,20 @@
 services:
   wordpress:
-    # Current production image: custom WordPress 6.9.6 core on the official Apache base.
-    # The WordPress 7 Nginx/FPM image remains staging-only until the container-side routing
-    # and production compatibility gates pass.
-    image: localhost/wordpress:6.9.6-php8.4-apache
+    # WordPress 7.0.4 core, official upstream PHP-FPM image, custom-built with an in-container
+    # Nginx front-end (see ./Dockerfile.nginx-fpm) since Apache is no longer used anywhere in
+    # this stack. Host Nginx (../nginx/) still terminates TLS and reverse-proxies here.
+    # LIVE since 2026-08-16 (see README.md "WordPress 7 cutover"). ./Dockerfile (Apache/6.9.6)
+    # and the localhost/wordpress:6.9.6-php8.4-apache image are kept as the rollback target.
+    image: localhost/wordpress:7.0.4-php8.4-fpm-nginx
     container_name: wordpress
     restart: unless-stopped
     ports:
       - "127.0.0.1:8082:80"
     # Hardening (2026-08-03, post-incident — see repo memory "WordPress account-creation
     # compromise"): container root filesystem is read-only, so WP core files (the image's own
-    # layer) can never be tampered with in a way that survives a container recreation — verified
-    # via /proc/mounts that the overlay root is genuinely `ro`. Note: /var/www/html itself is
-    # NOT covered by this (the upstream image declares it as a VOLUME, which Docker/Podman keeps
-    # writable regardless of `read_only` — a known quirk), but its contents are fully wiped and
-    # re-copied from the image on every recreate anyway, so nothing written there persists.
+    # layer) can never be tampered with in a way that survives a container recreation.
     # wp-content CANNOT also be read-only — the official image's own entrypoint chowns/
-    # reconciles wp-content on every boot and hard-fails if it can't (verified 2026-08-03:
-    # container died instantly with "Read-only file system" tar errors). Write-blocking for
+    # reconciles wp-content on every boot and hard-fails if it can't. Write-blocking for
     # wp-content itself is instead enforced at the WP application layer via
     # DISALLOW_FILE_EDIT/DISALLOW_FILE_MODS below (no plugin/theme editor, no installs/updates/
     # uploads through the web UI) — defense in depth, not OS-level immutability.
@@ -27,50 +24,10 @@ services:
     volumes:
       # Only wp-content is bind-mounted — core WordPress files are managed by the image
       # (recommended upstream pattern). SELinux :Z since this dir is exclusive to this container.
-      #
-      # ATTEMPTED 2026-08-08 and REVERTED: splitting this into a :ro root mount + :rw
-      # punch-out for uploads/ only (to block writes to plugins/themes at the kernel
-      # mount-namespace level) CRASHES this container on every single restart, not just
-      # rare recovery. Root cause: the official image's docker-entrypoint.sh always re-runs
-      # its "WordPress not found" tar-based recopy on every restart, because /var/www/html's
-      # CORE files (index.php, wp-includes/, etc.) live on the ephemeral image-declared
-      # VOLUME and are wiped every recreate — only wp-content itself persists via this bind
-      # mount. That recopy step explicitly skips re-copying INTO pre-existing plugin/theme
-      # subdirectories, but it still unconditionally tries to chown+utime the wp-content,
-      # wp-content/plugins, and wp-content/themes directory ENTRIES themselves (tar
-      # reapplies the source archive's ownership/mode to every directory it visits) — which
-      # hard-fails ("Read-only file system") the instant any part of wp-content is :ro,
-      # taking the whole entrypoint (and Apache) down with it. Confirmed live: container
-      # exited, site returned 502, immediately rolled back. See repo memory for full detail
-      # — do NOT retry a :ro/mount-level split on this image without first patching/
-      # replacing docker-entrypoint.sh to exclude wp-content's own top-level dirs, or
-      # confirming a future upstream image no longer recopies unconditionally on restart.
       - /storage/wordpress/wp-content:/var/www/html/wp-content:Z
-      # Defense in depth for the actual exploited vector (a compromised admin account
-      # uploading PHP webshells disguised as media files via the Media Library, 2026-08-08
-      # incident): disables PHP execution entirely inside uploads/ (any extension, not just
-      # .php/.phar — see ./apache-uploads-no-php.conf) at the Apache config level, which
-      # lives outside wp-content entirely, so it can never be weakened by anything
-      # WordPress itself (or a compromised admin account) can do. This mount path is
-      # independent of wp-content and unaffected by the revert above.
-      - ./apache-uploads-no-php.conf:/etc/apache2/conf-enabled/zz-uploads-no-php.conf:ro,Z
-      # /var/www/html is an ephemeral image-declared VOLUME, wiped on every container
-      # recreate, and nothing here regenerates .htaccess automatically (WordPress only
-      # writes it via a Settings > Permalinks save or flush_rewrite_rules(), and wp-cli
-      # can't write it from a CLI context either) — confirmed live 2026-08-08: every
-      # non-homepage URL 404s without this. Bind-mounted read-only so it always survives
-      # a recreate; see ./htaccess for the exact rewrite rules (standard root-install block).
-      - ./htaccess:/var/www/html/.htaccess:ro,Z
       # Without this, the wp-fail2ban plugin's PHP syslog() calls have nowhere to go inside
-      # the container (no /dev/log at all) and silently no-op — confirmed 2026-08-03 during
-      # the Nginx migration (Task 04). Bind-mounting the host's real journal socket restores
-      # the exact same behavior the native install had (auth-facility messages land in the
-      # host's /var/log/messages per rsyslog.conf, which the fixed `[wordpress]` fail2ban
-      # jail now reads). Mount the RESOLVED target, not the `/dev/log` symlink itself — this
-      # host's `/dev/log -> /run/systemd/journal/dev-log`, and bind-mounting a symlink SOURCE
-      # does not correctly attach to the real socket (verified: it silently produces a dead,
-      # unconnected socket node inside the container instead). No SELinux relabel flag — this
-      # is a device/socket node, not a regular dir.
+      # the container (no /dev/log at all) and silently no-op. Mount the RESOLVED target, not
+      # the `/dev/log` symlink itself — this host's `/dev/log -> /run/systemd/journal/dev-log`.
       - /run/systemd/journal/dev-log:/dev/log
       - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro,Z
       # Jackson Brain Ampache Integration plugin: the API key must never be an env var
@@ -88,7 +45,7 @@ services:
       # inherited from the RPM "WordPress in its own directory" setup to a single URL, since
       # the container is 100% dedicated to WordPress (no competing static site at the root
       # anymore). FORCE_SSL_ADMIN + the X-Forwarded-Proto shim keep admin HTTPS-only behind
-      # Apache's (later Nginx's) TLS-terminating reverse proxy.
+      # Nginx's TLS-terminating reverse proxy.
       # DISALLOW_FILE_EDIT/DISALLOW_FILE_MODS added 2026-08-03 (post-incident hardening):
       # blocks the wp-admin plugin/theme editor and any plugin/theme self-update or install
       # attempt at the WP-core level, on top of the read-only filesystem above (defense in depth).
@@ -117,7 +74,7 @@ services:
     # NOTE: this is a NO-OP for the current localhost/-built image (no registry to check
     # against) — kept only so it resumes working automatically once this switches back to
     # an official registry-hosted tag. Security patches until then require a manual rebuild
-    # (see ./Dockerfile).
+    # (see ./Dockerfile.nginx-fpm).
     labels:
       - "io.containers.autoupdate=registry"
     networks:

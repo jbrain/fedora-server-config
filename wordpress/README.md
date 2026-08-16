@@ -5,11 +5,13 @@ Podman container running a custom-built WordPress image, replacing the native RP
 (`../database/`). **Nginx** is now the TLS-terminating reverse proxy (Apache was fully removed
 host-wide 2026-08-03, Gate E of the [containerization plan](../plans/containerization-2026-08/README.md)).
 
-> **Status: live and hardened (2026-08-08).** Core upgraded to a custom-built `6.9.6`, a real
-> account-creation/webshell compromise was found and remediated twice, and the site now has
-> multiple independent write-prevention/exploit-mitigation layers on top of the original Gate B
-> deployment. See "Security incidents and hardening (2026-08-08)" below for the full summary —
-> full blow-by-blow detail lives in repo memory (`/memories/repo/fedora-server-config.md`).
+> **Status: live and hardened (2026-08-16).** WordPress 7.0.4 core on an official upstream
+> PHP-FPM base with an in-container Nginx front-end (Apache no longer used anywhere in this
+> stack) — see "WordPress 7 cutover — LIVE" below. A real account-creation/webshell compromise
+> was found and remediated twice prior to this, and the site has multiple independent
+> write-prevention/exploit-mitigation layers on top of the original Gate B deployment. See
+> "Security incidents and hardening (2026-08-08)" below for that summary — full blow-by-blow
+> detail lives in repo memory (`/memories/repo/fedora-server-config.md`).
 
 ## What was actually live before this (non-obvious — verified 2026-08-03)
 
@@ -40,7 +42,43 @@ https://jackson-brain.com/wordpress` (genuinely different values).
 
 ## Image choice
 
-## WordPress 7 upgrade assessment (2026-08-16)
+### WordPress 7 cutover — LIVE (2026-08-16)
+
+Production is now `localhost/wordpress:7.0.4-php8.4-fpm-nginx` (WordPress 7.0.4 core, official
+upstream PHP-FPM base, custom-built with an in-container Nginx front-end — see
+`./Dockerfile.nginx-fpm`). Apache is no longer used anywhere in this stack.
+
+Before the final cutover, the fixed image (with the PHP-FPM startup-race fix from
+`docker-entrypoint-nginx-fpm.sh`, commit `e0ec58c`) was smoke-tested against the REAL production
+database and wp-content (a second, temporary container on `127.0.0.1:8093`, sharing the
+`db-backend` network) — confirmed DB connectivity, real page content (`/about/` rendering byte-
+for-byte comparable output), and no PHP errors, before touching the actual `wordpress` container.
+A fresh DB + wp-content + compose backup was taken immediately before the cutover
+(`/storage/backups/wordpress-wp7-<timestamp>/`, in addition to the three backups from the
+same-day earlier failed attempts).
+
+Post-cutover verification, all passed: `systemctl restart wordpress` (full restart required per
+this repo's own podman-compose gotcha, not a bare `podman compose up`), container `healthy`,
+home/About/wp-login/wp-admin all correct HTTP codes through the real HTTPS host Nginx, WP core
+reports `7.0.4` (`wp-includes/version.php`), all 5 plugins still active (Contact Form 7, Flamingo,
+Google Sitemap Generator, Jackson Brain Ampache Integration, wp-fail2ban) with no fatal errors,
+`wp-cron.php` runs, and both compromise-mitigation layers re-verified independently: uploads/
+PHP-execution denial (403 via the public HTTPS path AND hitting the container directly on
+`127.0.0.1:8082`, bypassing host Nginx — confirms the container-level nginx-fpm.conf block still
+works even after removing the Apache-specific `apache-uploads-no-php.conf` mount) and `xmlrpc.php`
+still 403.
+
+**Compose changes for the Nginx/FPM image** (vs. the old Apache config): the
+`apache-uploads-no-php.conf` and `htaccess` bind mounts were removed (both Apache-specific —
+`nginx-fpm.conf`'s own `location` blocks already deny PHP execution under uploads/ and handle
+routing without `.htaccess`). Everything else (wp-content mount, `/dev/log`, `uploads.ini`,
+the JBA secret mount, `read_only: true` + `tmpfs: [/tmp]`, environment/`WORDPRESS_CONFIG_EXTRA`,
+healthcheck) is unchanged and confirmed still correct for the FPM image.
+
+`./Dockerfile` (6.9.6/Apache) and the `localhost/wordpress:6.9.6-php8.4-apache` image are kept
+locally as the rollback target, not deleted.
+
+### WordPress 7 upgrade assessment (2026-08-16)
 
 WordPress 7.0.4 is now an official stable security release, published by WordPress on August
 12, 2026. Docker Hub's official `library/wordpress` image publishes both Apache and PHP-FPM
@@ -59,17 +97,14 @@ no-Apache check passed. A localhost-only runtime smoke test confirmed both Nginx
 processes start in the container. The temporary container was removed after the test. No
 production image or database was changed.
 
-This confirms that the upgrade can move back to an official FPM image and remove the custom
-core-swap Dockerfile, but production has **not** been upgraded yet. The current custom `6.9.6`
-Apache image remains
-the deployed baseline until a staging clone passes the theme/plugin compatibility and compromise
-regression gates. WordPress 7.1 is still a release candidate and is not a production candidate.
+This confirmed the upgrade could move to an official FPM image and drop the custom core-swap
+Dockerfile — see "WordPress 7 cutover — LIVE" above for the final, successful deployment.
 
-Required staging gates before changing `docker-compose.yml`:
+Required staging gates that were satisfied before the final cutover:
 
 - Clone the database and `wp-content` into an isolated test project; never test against production.
-- Pin the official image by tag and digest, then verify the image's PHP extensions and Apache
-- FPM configuration against the current custom image.
+- Pin the official image by tag and digest, then verify the image's PHP extensions and FPM
+  configuration against the current custom image.
 - Add and test the container-side Nginx/FPM configuration; host Nginx must proxy HTTP to the
   container-side Nginx, not FastCGI directly to an unprotected FPM listener.
 - Exercise the custom theme, Contact Form 7, Flamingo, Google Sitemap Generator, wp-fail2ban,
@@ -78,45 +113,27 @@ Required staging gates before changing `docker-compose.yml`:
   XML-RPC blocking, syslog/fail2ban path, HTTPS/admin redirects, and no unexpected writable core.
 - Verify the cube/entropy page, conditional Contact Form 7 reCAPTCHA behavior, WP-Cron timer,
   media upload, permalinks, and database connectivity.
-- Only after staging passes should the production image change be deployed with a backup,
-  rollback target, and post-restart HTTP/service/hash checks.
 
-### Direct cutover attempt and rollback (2026-08-16)
+### Cutover history (2026-08-16)
 
-The owner-approved direct cutover was attempted after the image and configuration checks. Backups
-were created at `/storage/backups/wordpress-wp7-20260816-081358`, but the first container returned
-`403/404` because its entrypoint bypassed official WordPress initialization. The compose rollback
-completed automatically and restored the production image; home and About returned `200`.
+Two earlier direct-to-production attempts the same day failed and were auto-rolled-back: the
+first entrypoint bypassed official WordPress initialization (`403/404`); the second reached the
+Nginx/FPM container but returned `502` (a PHP-FPM startup race — Nginx started before FPM was
+ready to accept connections on `127.0.0.1:9000`). Both rollbacks restored
+`localhost/wordpress:6.9.6-php8.4-apache` cleanly and were verified (`200`s).
 
-A second guarded attempt reached the Nginx/FPM container but returned `502` through the host proxy
-and was also rolled back. Production is currently confirmed on
-`localhost/wordpress:6.9.6-php8.4-apache`.
+The entrypoint (`docker-entrypoint-nginx-fpm.sh`) was then fixed to wait for PHP-FPM's TCP
+listener before binding Nginx (commit `e0ec58c`), smoke-tested against real production DB/
+wp-content on an alternate port, and the final cutover succeeded — see "WordPress 7 cutover —
+LIVE" above for the full verification.
 
-The staging entrypoint was corrected to invoke the official WordPress entrypoint before starting
-PHP-FPM. It now waits for PHP-FPM's TCP listener on `127.0.0.1:9000` before binding Nginx, which
-prevents the startup race that previously produced an immediate `502 connect() failed` response.
-An isolated read-only runtime then confirmed core initialization, Nginx/FPM processes, Apache
-absence, and successful Nginx/PHP-FPM config tests. The remaining blocker is application-level
-HTTP routing under the real production database/wp-content configuration; no further production
-cutover should occur until that 502 is reproduced and fixed in staging.
+The tracked classic-theme compatibility pass is independent of the image switch: `functions.php`
+declares `title-tag` and HTML5 support and guards the Contact Form 7 constant; `header.php` uses
+an HTML5 document shell, viewport metadata, and `wp_body_open()`, while WordPress core owns the
+document title.
 
-The tracked classic-theme compatibility pass is intentionally independent of the image switch:
-`functions.php` now declares `title-tag` and HTML5 support and guards the Contact Form 7 constant;
-`header.php` uses an HTML5 document shell, viewport metadata, and `wp_body_open()`, while WordPress
-core owns the document title. These changes are safe to deploy against the current 6.9.6 baseline,
-but the official 7.0.4 image still requires the staging gates above.
-
-**Current image: `localhost/wordpress:6.9.6-php8.4-apache`** — a locally custom-built image (see
-`Dockerfile`), not an official Docker Hub tag. WordPress 6.9.4 (the original containerization
-target, matching what was already running) was found to be **insecure** per WordPress's own
-`stable-check` API during 2026-08-08 hardening; 6.9.6 is the fixed release on the *same* major
-line (deliberately not jumping to 7.x — the live site's plugins/theme were never tested against a
-new major, and Docker Hub had no `7.0.3`/`6.9.6`-tagged image published yet either way). The
-Dockerfile rebuilds the official `6.9.4-php8.4-apache` base with the real 6.9.6 core from
-wordpress.org, carefully preserving `wp-config-docker.php` (a Docker-image-specific file not in
-the plain release tarball — losing it once already broke the site for real, see the Dockerfile's
-own header comment). Switch back to an official `wordpress:<version>-php8.4-apache` tag once one
-matching a current security release exists on Docker Hub.
+**Rollback image: `localhost/wordpress:6.9.6-php8.4-apache`** (see `./Dockerfile`) — kept locally,
+not deleted, in case a rollback to Apache is ever needed again.
 
 ## Image auto-updates
 
@@ -124,8 +141,8 @@ Opted in to `podman auto-update` (label `io.containers.autoupdate=registry` in
 `docker-compose.yml`) — see [../podman-auto-update/README.md](../podman-auto-update/README.md)
 for the full mechanism (daily timer + a DNF post-transaction hook). **Currently a no-op**: since
 the image is a local custom build (`localhost/...`, no registry to check against), auto-update has
-nothing to pull. Security patches to WordPress core require a manual rebuild via the `Dockerfile`
-until this switches back to an official upstream tag.
+nothing to pull. Security patches to WordPress core require a manual rebuild via
+`Dockerfile.nginx-fpm` until this switches back to an official upstream tag.
 
 ## Deploy
 
