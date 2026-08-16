@@ -1,16 +1,16 @@
 services:
   wordpress:
     # Custom-built image (see ./Dockerfile): official wordpress:6.9.4-php8.4-apache base
-    # with WordPress core swapped for 6.9.6 (2026-08-08) - Docker Hub has not published an
-    # official image for 6.9.5, 6.9.6, or 7.0.3 yet, and confirmed 6.9.4 is flagged
+    # with WordPress core swapped for 6.9.6 (2026-08-08). At the 2026-08-16 review, Docker Hub
+    # publishes the official wordpress:7.0.4-php8.4-apache image, but the upgrade is not yet
+    # deployed; confirmed 6.9.4 is flagged
     # "insecure" by WordPress's own stable-check API while 6.9.6 is the fixed release on
     # this same major line. Deliberately stays on 6.9.x rather than jumping to 7.x to avoid
     # combining an untested major-version upgrade (new admin UI, theme/plugin compatibility)
     # with this security fix - the live site has 4 active plugins (Contact Form 7, Flamingo,
     # Google Sitemap Generator, wp-fail2ban) plus a custom theme ("jackbrain"). Revisit the
-    # major-version upgrade separately once an official 7.x image with matching security
-    # fixes is available. Switch back to an official `wordpress:<version>-php8.4-apache` tag
-    # once Docker Hub catches up - see Dockerfile's own header comment for the rebuild steps.
+    # major-version upgrade separately now that an official 7.0.4 image is available; staging
+    # and compatibility gates still have to pass. See Dockerfile's header comment for context.
     image: localhost/wordpress:6.9.6-php8.4-apache
     container_name: wordpress
     restart: unless-stopped

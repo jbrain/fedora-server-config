@@ -40,6 +40,32 @@ https://jackson-brain.com/wordpress` (genuinely different values).
 
 ## Image choice
 
+## WordPress 7 upgrade assessment (2026-08-16)
+
+WordPress 7.0.4 is now an official stable security release, published by WordPress on August
+12, 2026. Docker Hub's official `library/wordpress` image publishes the matching
+`wordpress:7.0.4-php8.4-apache` tag. The amd64 manifest digest observed during this check-in is
+`sha256:f047aeee171f821cca23eb6583df687958bb157a5967e19924fc82eb5367d56c`.
+
+This confirms that the upgrade can move back to an official image and remove the custom core-swap
+Dockerfile, but production has **not** been upgraded yet. The current custom `6.9.6` image remains
+the deployed baseline until a staging clone passes the theme/plugin compatibility and compromise
+regression gates. WordPress 7.1 is still a release candidate and is not a production candidate.
+
+Required staging gates before changing `docker-compose.yml`:
+
+- Clone the database and `wp-content` into an isolated test project; never test against production.
+- Pin the official image by tag and digest, then verify the image's PHP extensions and Apache
+  configuration against the current custom image.
+- Exercise the custom theme, Contact Form 7, Flamingo, Google Sitemap Generator, wp-fail2ban,
+  and the Jackson Brain Ampache Integration plugin.
+- Re-run the compromise regression checks: disabled file modifications, uploads PHP denial,
+  XML-RPC blocking, syslog/fail2ban path, HTTPS/admin redirects, and no unexpected writable core.
+- Verify the cube/entropy page, conditional Contact Form 7 reCAPTCHA behavior, WP-Cron timer,
+  media upload, permalinks, and database connectivity.
+- Only after staging passes should the production image change be deployed with a backup,
+  rollback target, and post-restart HTTP/service/hash checks.
+
 **Current image: `localhost/wordpress:6.9.6-php8.4-apache`** — a locally custom-built image (see
 `Dockerfile`), not an official Docker Hub tag. WordPress 6.9.4 (the original containerization
 target, matching what was already running) was found to be **insecure** per WordPress's own
