@@ -2,7 +2,7 @@
 
 The live `jackbrain` WordPress theme (`/storage/wordpress/wp-content/themes/jackbrain/` on the
 server) is **not fully version-controlled** — it's a legacy theme with templates/CSS/images that
-predate this repo and were never brought in. These three files are the exception: they're tracked
+predate this repo and were never brought in. These four files are the exception: they're tracked
 here because they now encode load-bearing, hand-verified behavior (the cube engine integration
 and, as of 2026-08-14, a jQuery-free rewrite) that must not be silently lost or reverted.
 
@@ -18,14 +18,16 @@ and, as of 2026-08-14, a jQuery-free rewrite) that must not be silently lost or 
 - **`jbAbout.php`**: owns the About page's cube mount and static, accessible entropy-study
   template, including its native Methodology dialog. The bundled JavaScript binds behavior to
   this markup; it does not inject panel HTML.
+- **`header.php`**: contains the legacy theme head markup and conditionally loads Contact Form 7's
+  reCAPTCHA API only on pages containing an actual contact form.
 
 The rest of the theme (`style.css`, other template files, `images/`, `js/libs.js` (Raphael, vendored,
 untouched), `js/particles/` (dead/orphaned, not enqueued)) remains live-server-only, matching
 this repo's existing convention for the theme as a whole.
 
 The entropy-enabled `jbAbout.php` + cube bundle release was deployed and verified on 2026-08-15.
-The current synchronized theme backup timestamp is `20260815-163604`; the restored-Methodology
-release backup remains available under `20260815-154349`.
+The current synchronized theme backup timestamp is `20260816-074110`; the prior layout backup
+remains available under `20260815-163604`.
 
 The QR result control is part of the entropy template and requires the matching generated cube
 bundle. It is an opt-in local export of the displayed result; scanning it shares the encoded salt,

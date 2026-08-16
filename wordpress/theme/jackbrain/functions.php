@@ -354,7 +354,9 @@ function jackbrain_comment($comment, $args, $depth) {
 
     // do not load the local jQuery
     wp_deregister_script('jquery');
-    define('WPCF7_LOAD_JS', false);
+    if (!defined('WPCF7_LOAD_JS')) {
+        define('WPCF7_LOAD_JS', false);
+    }
     wp_deregister_script('contact-form-7');
     /**
      * Load Jetpack compatibility file. On second thought, fuck JetPack.

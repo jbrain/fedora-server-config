@@ -9,7 +9,7 @@ Configuration and deployment files for **jackson-brain.com** (`192.168.88.251`),
 | Hostname | `jackson-brain.com` |
 | LAN IP | `192.168.88.251` |
 | OS | Fedora Linux 43 |
-| Kernel | 7.0.12-101.fc43.x86_64 |
+| Kernel | 7.1.7-100.fc43.x86_64 |
 | CPU | Intel Xeon E3-1271 v3 @ 3.60GHz (4C/8T) |
 | RAM | 16 GB |
 | Boot disk | 119 GB Kingston SSD (LVM: `/` 50 GB, `/home` 65 GB, swap 4 GB) |

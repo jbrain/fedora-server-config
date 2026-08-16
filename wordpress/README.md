@@ -220,6 +220,34 @@ directly, not WordPress's normal random-password self-registration flow) live in
 
 ## Security checklist
 
+## Security check-in (2026-08-16)
+
+SSH connectivity was verified with the expected `jack` account, and the read-only Linux MCP
+connector was verified through the canonical host `jackson-brain.com`. The MCP alias `linus` was
+not resolvable by that connector and the LAN IP was rejected as an untrusted host key; use the
+canonical hostname for MCP checks. Live `wordpress`, `nginx`, `firewalld`, `fail2ban`,
+`shared-mariadb`, `sshd`, `wordpress-wp-cron.timer`, and `podman-auto-update.timer` are active.
+The host reports Fedora 43, kernel `7.1.7-100.fc43.x86_64`, and approximately one week of uptime.
+
+The 2026-08-03 and 2026-08-08 WordPress compromises remain the relevant historical incidents:
+rogue accounts, a defacement post, and five double-extension PHP webshells. Existing mitigations
+remain documented and live: WordPress 6.9.6 custom image, plugin updates, disabled file editors
+and modifications, XML-RPC blocking, uploads PHP denial, fail2ban WordPress/Nginx jails, and
+container read-only root filesystem. The current audit found no new compromise indicator in the
+available service-status evidence. A theme warning from unconditional `WPCF7_LOAD_JS` definition
+was fixed with a `defined()` guard.
+
+Current review notes:
+
+- The public listeners include SSH/22, RPC bind/111, LLMNR/5355, Cockpit/9090, and Netdata/19999;
+  verify each is intentionally LAN-restricted in the active firewalld rules, not only in the
+  historical Shorewall documentation.
+- Direct non-interactive SSH can verify connectivity but cannot read privileged journals without
+  sudo. MCP service checks work, while several journal queries returned no entries; treat that as
+  an observability limitation, not proof that logs are empty.
+- The repository's historical overview still contains older kernel/service wording in places;
+  the live kernel value above is the current check-in baseline.
+
 - [x] Container runs as the image's default non-root web user (`www-data`); `wp-content` owned
       by UID/GID 33, not world-writable.
 - [x] DB user is the least-priv `wordpress` user, password in `600` `.env`, not committed
