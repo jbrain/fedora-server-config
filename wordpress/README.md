@@ -93,10 +93,12 @@ and was also rolled back. Production is currently confirmed on
 `localhost/wordpress:6.9.6-php8.4-apache`.
 
 The staging entrypoint was corrected to invoke the official WordPress entrypoint before starting
-PHP-FPM. An isolated read-only runtime then confirmed core initialization, Nginx/FPM processes,
-Apache absence, and successful Nginx/PHP-FPM config tests. The remaining blocker is application-
-level HTTP routing under the real production database/wp-content configuration; no further
-production cutover should occur until that 502 is reproduced and fixed in staging.
+PHP-FPM. It now waits for PHP-FPM's TCP listener on `127.0.0.1:9000` before binding Nginx, which
+prevents the startup race that previously produced an immediate `502 connect() failed` response.
+An isolated read-only runtime then confirmed core initialization, Nginx/FPM processes, Apache
+absence, and successful Nginx/PHP-FPM config tests. The remaining blocker is application-level
+HTTP routing under the real production database/wp-content configuration; no further production
+cutover should occur until that 502 is reproduced and fixed in staging.
 
 The tracked classic-theme compatibility pass is intentionally independent of the image switch:
 `functions.php` now declares `title-tag` and HTML5 support and guards the Contact Form 7 constant;
