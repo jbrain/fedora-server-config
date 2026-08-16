@@ -274,6 +274,18 @@ Current review notes:
 - The repository's historical overview still contains older kernel/service wording in places;
   the live kernel value above is the current check-in baseline.
 
+### Critical finding remediated: theme artifacts publicly readable
+
+The live legacy theme webroot was serving `.git/HEAD`, timestamped PHP rollback files, and a Vim
+swap file with HTTP 200 responses. These artifacts can disclose source, deployment history, and
+possibly sensitive implementation details even when PHP itself does not execute them. The
+remediation is to move all rollback/editor artifacts outside the webroot and add the scoped Nginx
+deny rule in `../nginx/conf.d/jackson-brain.com.conf`. Remediation completed 2026-08-16:
+artifacts were moved to `/storage/wordpress/theme-backups/jackbrain-20260816` (`root:root`, mode
+`700`), Nginx passed `nginx -t` and reloaded, and public probes returned `403` for `.git/HEAD`,
+timestamped backups, and the swap file while normal `header.php` remained available with `200`.
+Do not store backups under `wp-content/themes/` again.
+
 - [x] Container runs as the image's default non-root web user (`www-data`); `wp-content` owned
       by UID/GID 33, not world-writable.
 - [x] DB user is the least-priv `wordpress` user, password in `600` `.env`, not committed
