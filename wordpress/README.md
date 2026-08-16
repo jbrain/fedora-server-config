@@ -43,12 +43,19 @@ https://jackson-brain.com/wordpress` (genuinely different values).
 ## WordPress 7 upgrade assessment (2026-08-16)
 
 WordPress 7.0.4 is now an official stable security release, published by WordPress on August
-12, 2026. Docker Hub's official `library/wordpress` image publishes the matching
-`wordpress:7.0.4-php8.4-apache` tag. The amd64 manifest digest observed during this check-in is
-`sha256:f047aeee171f821cca23eb6583df687958bb157a5967e19924fc82eb5367d56c`.
+12, 2026. Docker Hub's official `library/wordpress` image publishes both Apache and PHP-FPM
+variants. Because this server's target architecture is Nginx at the host and container layers,
+the correct target is `wordpress:7.0.4-php8.4-fpm`, whose amd64 manifest digest observed during
+this check-in is `sha256:39ba732a08cc1078889df0052c18a721bf400191689d15b01bcc1c7ed265e840`.
 
-This confirms that the upgrade can move back to an official image and remove the custom core-swap
-Dockerfile, but production has **not** been upgraded yet. The current custom `6.9.6` image remains
+The official FPM image was pulled and validated rootfully on the host: WordPress `7.0.4`, PHP
+`8.4.24`, no Apache binary, and PHP-FPM configuration test successful. The Apache variant was
+also validated, but is rejected for this architecture because it runs Apache inside the
+WordPress container.
+
+This confirms that the upgrade can move back to an official FPM image and remove the custom
+core-swap Dockerfile, but production has **not** been upgraded yet. The current custom `6.9.6`
+Apache image remains
 the deployed baseline until a staging clone passes the theme/plugin compatibility and compromise
 regression gates. WordPress 7.1 is still a release candidate and is not a production candidate.
 
@@ -56,7 +63,9 @@ Required staging gates before changing `docker-compose.yml`:
 
 - Clone the database and `wp-content` into an isolated test project; never test against production.
 - Pin the official image by tag and digest, then verify the image's PHP extensions and Apache
-  configuration against the current custom image.
+- FPM configuration against the current custom image.
+- Add and test the container-side Nginx/FPM configuration; host Nginx must proxy HTTP to the
+  container-side Nginx, not FastCGI directly to an unprotected FPM listener.
 - Exercise the custom theme, Contact Form 7, Flamingo, Google Sitemap Generator, wp-fail2ban,
   and the Jackson Brain Ampache Integration plugin.
 - Re-run the compromise regression checks: disabled file modifications, uploads PHP denial,
